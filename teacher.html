@@ -2,12 +2,12 @@
 <meta charset="utf-8">
 <title>出题人-成绩查看</title>
 <style>
-  body{max-width:1000px;margin:20px auto;font-family:Arial}
+  body{max-width:1000px;margin:20px auto;font-family:Arial;padding:0 20px}
   .card{border:1px solid #ccc;padding:20px;margin:20px 0;border-radius:8px}
   table{width:100%;border-collapse:collapse;margin:20px 0}
   th,td{border:1px solid #ccc;padding:12px;text-align:center}
   th{background:#f0f0f0}
-  .empty{text-align:center;padding:30px;color:#666;border:1px dashed #ccc;border-radius:8px}
+  .empty{text-align:center;padding:30px;color:#666;border:1px dashed #ccc;border-radius:8px;margin:20px 0}
 </style>
 <div class="card">
   <h2>答题成绩汇总</h2>
@@ -16,32 +16,36 @@
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-  // ✅ 第一步：先定义所有变量
-  const GITHUB_TOKEN = process.env.GITHUB_TOKEN || ""; // Netlify环境变量
-  const GITHUB_REPO = "jojoWangkun/English-test"; // 先定义仓库名
+  // 全局变量（先定义后使用）
+  const GITHUB_TOKEN = process.env.GITHUB_TOKEN || ""; // 本地测试可临时填令牌：|| "ghp_你的令牌"
+  const GITHUB_REPO = "jojoWangkun/English-test";
   const SCORE_FILE = "答题成绩汇总.xlsx";
 
-  // ✅ 第二步：再使用变量
   window.onload = loadScores;
 
-  // 加载成绩Excel
+  // 加载成绩
   async function loadScores() {
     const scoreList = document.getElementById('scoreList');
     scoreList.innerHTML = "<div class='empty'>正在加载成绩...</div>";
 
     try {
-      // 这里使用之前定义的变量
-      const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${SCORE_FILE}`;
-      const res = await fetch(url, {
-        headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
+      const requestUrl = `https://api.github.com/repos/${GITHUB_REPO}/contents/${SCORE_FILE}`;
+      const response = await fetch(requestUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${GITHUB_TOKEN}`, // 核心：token改Bearer
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        },
+        mode: 'cors'
       });
 
-      if (!res.ok) {
-        scoreList.innerHTML = "<div class='empty'>暂无答题成绩</div>";
+      if (!response.ok) {
+        scoreList.innerHTML = "<div class='empty'>暂无答题成绩，待答题人完成后自动生成</div>";
         return;
       }
 
-      const fileData = await res.json();
+      const fileData = await response.json();
       const content = atob(fileData.content);
       const arrayBuffer = new ArrayBuffer(content.length);
       const uint8Array = new Uint8Array(arrayBuffer);
@@ -56,23 +60,23 @@
         return;
       }
 
-      // 渲染成绩表格
-      let html = `<table><tr><th>序号</th><th>姓名</th><th>题库名称</th><th>总题数</th><th>正确题数</th><th>得分</th><th>答题时间</th></tr>`;
-      scores.forEach((item, idx) => {
-        html += `<tr>
-          <td>${idx+1}</td>
-          <td>${item.姓名||""}</td>
-          <td>${item.题库名称||""}</td>
-          <td>${item.总题数||""}</td>
-          <td>${item.正确题数||""}</td>
-          <td>${item.得分||""}</td>
-          <td>${item.答题时间||""}</td>
+      let tableHtml = `<table><tr><th>序号</th><th>姓名</th><th>题库名称</th><th>总题数</th><th>正确题数</th><th>得分</th><th>答题时间</th></tr>`;
+      scores.forEach((item, index) => {
+        tableHtml += `<tr>
+          <td>${index + 1}</td>
+          <td>${item.姓名 || "未填写"}</td>
+          <td>${item.题库名称 || "未知"}</td>
+          <td>${item.总题数 || 0}</td>
+          <td>${item.正确题数 || 0}</td>
+          <td>${item.得分 || 0} 分</td>
+          <td>${item.答题时间 || ""}</td>
         </tr>`;
       });
-      html += `</table>`;
-      scoreList.innerHTML = html;
-    } catch (e) {
-      scoreList.innerHTML = `<div class='empty'>加载失败：${e.message}</div>`;
+      tableHtml += `</table>`;
+      scoreList.innerHTML = tableHtml;
+    } catch (error) {
+      scoreList.innerHTML = `<div class='empty'>加载失败：${error.message}</div>`;
+      console.error("成绩加载错误：", error);
     }
   }
 </script>
