@@ -3,163 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>英语考核系统 - 纯网页版</title>
+    <title>英语考核系统 - 角色选择</title>
     <style>
         body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
-        .container { border: 1px solid #ccc; padding: 30px; border-radius: 10px; }
-        h1 { text-align: center; color: #333; }
-        .form-group { margin: 20px 0; }
-        label { display: block; margin-bottom: 8px; font-weight: bold; }
-        input[type="text"] { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 5px; }
-        .radio-group { margin: 10px 0; }
-        .radio-group label { display: inline; margin-right: 20px; font-weight: normal; }
-        button { width: 100%; padding: 12px; font-size: 18px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        button:hover { background-color: #45a049; }
-        .error { color: red; text-align: center; margin: 10px 0; }
+        .container { border: 1px solid #ccc; padding: 30px; border-radius: 10px; text-align: center; }
+        h1 { color: #333; margin-bottom: 40px; }
+        .btn { display: block; width: 80%; margin: 20px auto; padding: 15px; font-size: 18px; text-decoration: none; border-radius: 8px; color: white; }
+        .teacher-btn { background-color: #2196F3; }
+        .student-btn { background-color: #4CAF50; }
+        .btn:hover { opacity: 0.9; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>英语考核系统</h1>
-        <div id="error" class="error"></div>
-        <form id="startForm">
-            <div class="form-group">
-                <label for="name">请输入你的姓名：</label>
-                <input type="text" id="name" name="name" placeholder="例如：张三" required>
-            </div>
-            <div class="form-group">
-                <label>选择答题模式：</label>
-                <div class="radio-group">
-                    <input type="radio" id="en2cn" name="mode" value="en2cn" checked>
-                    <label for="en2cn">英译中</label>
-
-                    <input type="radio" id="cn2en" name="mode" value="cn2en">
-                    <label for="cn2en">中译英</label>
-
-                    <input type="radio" id="mix" name="mode" value="mix">
-                    <label for="mix">中英互译（随机）</label>
-                </div>
-            </div>
-            <button type="submit">开始答题</button>
-        </form>
+        <a href="teacher.html" class="btn teacher-btn">📝 我是出题人（上传题目/查看成绩）</a>
+        <a href="student.html" class="btn student-btn">✏️ 我是答题人（开始答题）</a>
     </div>
-
-    <script>
-        // ========== 配置项（替换成你的Gitee信息） ==========
-        const GITEE_TOKEN = "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"; // 有repo权限
-        const GITEE_REPO = "jojoWangkun/English-test"; // 例如：test123/english-test
-        const SCORE_FILE = "答题成绩汇总.xlsx";
-
-        // ========== 工具函数 ==========
-        // 读取Gitee文件内容
-        async function getGiteeFile(fileName) {
-            const username = GITEE_REPO.split("/")[0];
-            const repo = GITEE_REPO.split("/")[1];
-            const url = `https://gitee.com/api/v5/repos/${username}/${repo}/contents/${fileName}`;
-
-            try {
-                const res = await fetch(url, {
-                    headers: { "Authorization": `token ${GITEE_TOKEN}` }
-                });
-                if (res.status === 200) {
-                    const data = await res.json();
-                    if (data.content) {
-                        // 解码base64
-                        const content = atob(data.content);
-                        return { content, sha: data.sha };
-                    }
-                }
-                return { content: null, sha: null };
-            } catch (e) {
-                console.error("读取Gitee文件失败：", e);
-                return { content: null, sha: null };
-            }
-        }
-
-        // 加载题库（优先Gitee，无则用内置）
-        async function loadQuestions() {
-            // 1. 尝试从Gitee读取Excel题库
-            const username = GITEE_REPO.split("/")[0];
-            const repo = GITEE_REPO.split("/")[1];
-            const listUrl = `https://gitee.com/api/v5/repos/${username}/${repo}/contents/`;
-
-            try {
-                const res = await fetch(listUrl, {
-                    headers: { "Authorization": `token ${GITEE_TOKEN}` }
-                });
-                if (res.status === 200) {
-                    const files = await res.json();
-                    const excelFiles = files.filter(f => f.name && (f.name.endsWith(".xlsx") || f.name.endsWith(".xls")));
-
-                    if (excelFiles.length > 0) {
-                        // 读取第一个Excel文件（用SheetJS解析）
-                        const fileUrl = excelFiles[0].download_url;
-                        const excelRes = await fetch(fileUrl);
-                        const arrayBuffer = await excelRes.arrayBuffer();
-                        const workbook = XLSX.read(arrayBuffer);
-                        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                        const json = XLSX.utils.sheet_to_json(sheet, { header: ["编号", "英文", "中文"] });
-                        // 去掉表头
-                        return json.slice(1).filter(item => item.编号);
-                    }
-                }
-            } catch (e) {
-                console.error("加载Gitee题库失败：", e);
-            }
-
-            // 2. 内置备用题库
-            return [
-                { 编号: 1, 英文: "Hello World", 中文: "你好世界" },
-                { 编号: 2, 英文: "Python is easy", 中文: "Python很简单" },
-                { 编号: 3, 英文: "Web application", 中文: "网页应用" },
-                { 编号: 4, 英文: "Cloud storage", 中文: "云存储" },
-                { 编号: 5, 英文: "English test", 中文: "英语测试" },
-                { 编号: 6, 英文: "No Python needed", 中文: "无需Python" },
-                { 编号: 7, 英文: "Pure frontend", 中文: "纯前端" },
-                { 编号: 8, 英文: "Auto save score", 中文: "自动保存成绩" },
-                { 编号: 9, 英文: "Free forever", 中文: "永久免费" },
-                { 编号: 10, 英文: "Easy to use", 中文: "使用简单" }
-            ];
-        }
-
-        // ========== 主逻辑 ==========
-        document.getElementById("startForm").addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const name = document.getElementById("name").value.trim();
-            const mode = document.querySelector('input[name="mode"]:checked').value;
-
-            if (!name) {
-                document.getElementById("error").textContent = "请输入姓名！";
-                return;
-            }
-
-            // 加载题库
-            const questions = await loadQuestions();
-            // 随机打乱
-            const shuffledQuestions = [...questions].sort(() => Math.random() - 0.5);
-            // 生成题目类型
-            const questionTypes = shuffledQuestions.map(() => {
-                return mode === "mix" ? (Math.random() > 0.5 ? "en2cn" : "cn2en") : mode;
-            });
-
-            // 保存到本地存储
-            localStorage.setItem("testData", JSON.stringify({
-                name,
-                mode,
-                questions: shuffledQuestions,
-                questionTypes,
-                answers: {},
-                currentIndex: 0
-            }));
-
-            // 跳转到答题页
-            window.location.href = "test.html";
-        });
-
-        // 引入SheetJS（解析Excel）
-        const script = document.createElement("script");
-        script.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
-        document.head.appendChild(script);
-    </script>
 </body>
 </html>
