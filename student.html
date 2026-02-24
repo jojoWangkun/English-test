@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>答题入口</title>
+<style>
+  body{max-width:500px;margin:50px auto;font-family:Arial}
+  .btn{display:block;width:100%;padding:15px;margin:10px 0;font-size:18px;border:none;border-radius:8px;color:white;cursor:pointer;background:#4CAF50}
+  .btn:hover{opacity:0.9}
+  .empty{text-align:center;color:#666;margin:20px 0;padding:20px;border:1px solid #eee;border-radius:8px}
+</style>
+<h1>选择题库开始答题</h1>
+<div id="fileList"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+  // ========== 只改这2行！ ==========
+  const GITHUB_TOKEN = "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"; // 替换成你的GitHub令牌
+  const GITHUB_REPO = "jojoWangkun/English-test"; // 你的仓库名（不用改）
+  const FOLDER_PATH = "questions";
+
+  // 加载题库列表
+  window.onload = loadFileList;
+
+  async function loadFileList() {
+    const fileList = document.getElementById('fileList');
+    fileList.textContent = "加载题库列表中...";
+
+    try {
+      const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${FOLDER_PATH}`;
+      const response = await fetch(url, {
+        headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
+      });
+
+      if (response.ok) {
+        const files = await response.json();
+        const excelFiles = files.filter(file => file.name.endsWith('.xlsx'));
+
+        if (excelFiles.length === 0) {
+          fileList.innerHTML = "<div class='empty'>暂无可用题库，请联系出题人上传</div>";
+          return;
+        }
+
+        // 渲染题库按钮
+        fileList.innerHTML = excelFiles.map(file => `
+          <button class="btn" onclick="startTest('${file.name}')">${file.name}</button>
+        `).join('');
+      } else {
+        throw new Error("加载失败，请刷新页面");
+      }
+    } catch (e) {
+      fileList.innerHTML = `<div class='empty'>加载题库失败：${e.message}</div>`;
+    }
+  }
+
+  // 选择题库，跳转到答题页
+  function startTest(fileName) {
+    localStorage.setItem('selectedQuestionFile', fileName);
+    location.href = 'test.html';
+  }
+</script>

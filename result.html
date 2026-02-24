@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>答题结果</title>
+<style>
+  body{max-width:500px;margin:50px auto;text-align:center;font-family:Arial}
+  .result-card{border:1px solid #ccc;padding:30px;border-radius:8px;background:#f9f9f9}
+  .score{font-size:24px;margin:20px 0;color:#2196F3}
+  .btn{display:inline-block;padding:12px 24px;margin:20px 0;font-size:16px;text-decoration:none;color:white;background:#4CAF50;border-radius:5px}
+  .btn:hover{opacity:0.9}
+</style>
+<div class="result-card">
+  <h1>答题完成！</h1>
+  <div class="score" id="score"></div>
+  <div id="detail"></div>
+  <a href="student.html" class="btn">重新答题</a>
+  <a href="index.html" class="btn" style="background:#2196F3">返回首页</a>
+</div>
+
+<script>
+  // 读取答题结果
+  window.onload = function() {
+    const result = JSON.parse(localStorage.getItem('testResult'));
+    const score = document.getElementById('score');
+    const detail = document.getElementById('detail');
+
+    if (!result) {
+      score.textContent = "暂无答题结果";
+      detail.textContent = "请先完成答题";
+      return;
+    }
+
+    // 显示结果
+    score.textContent = `最终得分：${result.得分} 分`;
+    detail.textContent = `总题数：${result.总题数} 题 | 正确：${result.正确题数} 题 | 错误：${result.总题数 - result.正确题数} 题`;
+
+    // 清空本地存储（可选）
+    localStorage.removeItem('selectedQuestionFile');
+    localStorage.removeItem('currentAnswer');
+  };
+</script>

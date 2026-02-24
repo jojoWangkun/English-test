@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>出题人后台</title>
+<style>
+  body{max-width:800px;margin:20px auto;font-family:Arial}
+  .card{border:1px solid #ccc;padding:20px;margin:20px 0;border-radius:8px}
+  .alert{padding:10px;margin:10px 0;border-radius:5px}
+  .success{background:#dff0d8;color:#3c763d}
+  .danger{background:#f2dede;color:#a94442}
+  input{width:100%;padding:8px;margin:10px 0;box-sizing:border-box}
+  button{padding:10px 20px;border:none;border-radius:5px;color:white;cursor:pointer}
+  .primary{background:#2196F3}
+  .danger-btn{background:#f44336}
+  .file-item{display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid #eee}
+</style>
+<div class="card">
+  <h2>上传Excel题库（无表头：第1列序号、第2列英文、第3列中文）</h2>
+  <input type="file" id="excelFile" accept=".xlsx">
+  <button class="primary" onclick="uploadFile()">上传题库</button>
+  <div id="msg" class="alert"></div>
+</div>
+
+<div class="card">
+  <h2>已上传题库列表</h2>
+  <div id="fileList"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+  // ========== 只改这2行！ ==========
+  const GITHUB_TOKEN = "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"; // 替换成你的GitHub令牌
+  const GITHUB_REPO = "jojoWangkun/English-test"; // 你的仓库名（不用改）
+  const FOLDER_PATH = "questions"; // 题库文件夹（和你仓库里的一致）
+
+  // 页面加载时显示已上传的题库
+  window.onload = function() {
+    loadFileList();
+  };
+
+  // 上传Excel文件
+  async function uploadFile() {
+    const fileInput = document.getElementById('excelFile');
+    const file = fileInput.files[0];
+    const msg = document.getElementById('msg');
+
+    // 校验文件
+    if (!file) {
+      msg.className = "alert danger";
+      msg.textContent = "请选择.xlsx格式的Excel文件！";
+      return;
+    }
+    if (!file.name.endsWith('.xlsx')) {
+      msg.className = "alert danger";
+      msg.textContent = "仅支持.xlsx格式！";
+      return;
+    }
+
+    msg.className = "alert";
+    msg.textContent = "正在上传并解析文件...";
+
+    try {
+      // 1. 读取Excel文件（只认列位置，不认表头）
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 }); // 按行读取，不解析表头
+
+      // 2. 校验数据：至少有1行数据，且每行至少3列
+      const validData = data.filter(row => row.length >= 3);
+      if (validData.length === 0) {
+        throw new Error("Excel至少要有1行数据，且每行至少3列（序号、英文、中文）！");
+      }
+
+      // 3. 转换为Base64编码（GitHub要求）
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      const base64Content = btoa(String.fromCharCode(...new Uint8Array(excelBuffer)));
+
+      // 4. 上传到GitHub的questions文件夹
+      const fileName = file.name;
+      const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${FOLDER_PATH}/${fileName}`;
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: `上传题库：${fileName}`,
+          content: base64Content,
+          branch: 'main'
+        })
+      });
+
+      if (response.ok) {
+        msg.className = "alert success";
+        msg.textContent = "上传成功！";
+        fileInput.value = ""; // 清空文件选择
+        loadFileList(); // 刷新文件列表
+      } else {
+        const error = await response.json();
+        throw new Error(`上传失败：${error.message || 'GitHub API错误'}`);
+      }
+    } catch (e) {
+      msg.className = "alert danger";
+      msg.textContent = `错误：${e.message}`;
+      console.error(e);
+    }
+  }
+
+  // 加载已上传的题库列表
+  async function loadFileList() {
+    const fileList = document.getElementById('fileList');
+    fileList.textContent = "加载中...";
+
+    try {
+      const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${FOLDER_PATH}`;
+      const response = await fetch(url, {
+        headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
+      });
+
+      if (response.ok) {
+        const files = await response.json();
+        // 只显示.xlsx文件
+        const excelFiles = files.filter(file => file.name.endsWith('.xlsx'));
+
+        if (excelFiles.length === 0) {
+          fileList.innerHTML = "<div>暂无上传的题库</div>";
+          return;
+        }
+
+        // 渲染文件列表（带删除按钮）
+        fileList.innerHTML = excelFiles.map(file => `
+          <div class="file-item">
+            <span>${file.name}</span>
+            <button class="danger-btn" onclick="deleteFile('${file.name}', '${file.sha}')">删除</button>
+          </div>
+        `).join('');
+      } else {
+        throw new Error("加载题库列表失败");
+      }
+    } catch (e) {
+      fileList.innerHTML = `<div class="alert danger">加载失败：${e.message}</div>`;
+    }
+  }
+
+  // 删除题库文件
+  async function deleteFile(fileName, sha) {
+    if (!confirm(`确定删除【${fileName}】吗？`)) return;
+
+    try {
+      const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${FOLDER_PATH}/${fileName}`;
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: `删除题库：${fileName}`,
+          sha: sha,
+          branch: 'main'
+        })
+      });
+
+      if (response.ok) {
+        loadFileList(); // 刷新列表
+      } else {
+        throw new Error("删除失败");
+      }
+    } catch (e) {
+      alert(`删除错误：${e.message}`);
+    }
+  }
+</script>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>答题页面</title>
+<style>
+  body{max-width:600px;margin:20px auto;font-family:Arial}
+  .question-card{border:1px solid #ccc;padding:20px;margin:20px 0;border-radius:8px}
+  .progress{text-align:center;font-size:18px;margin:10px 0}
+  .question{font-size:20px;margin:20px 0;padding:10px;background:#f9f9f9;border-radius:5px}
+  input{width:100%;padding:10px;font-size:16px;box-sizing:border-box;margin:20px 0;border:1px solid #ccc;border-radius:5px}
+  button{padding:10px 20px;font-size:16px;border:none;border-radius:5px;color:white;background:#2196F3;cursor:pointer}
+  .error{text-align:center;color:red;margin:20px 0}
+</style>
+<div class="progress" id="progress">加载题库中...</div>
+<div class="question-card" id="questionCard" style="display:none">
+  <div class="question" id="question"></div>
+  <input type="text" id="answer" placeholder="请输入答案">
+  <button onclick="submitAnswer()">提交并下一题</button>
+</div>
+<div class="error" id="error"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+  // ========== 只改这2行！ ==========
+  const GITHUB_TOKEN = "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"; // 替换成你的GitHub令牌
+  const GITHUB_REPO = "jojoWangkun/English-test"; // 你的仓库名（不用改）
+  const FOLDER_PATH = "questions";
+
+  // 全局变量
+  let questions = []; // 题库数据：[{序号, 英文, 中文}, ...]
+  let currentIndex = 0; // 当前答题索引
+  let correctCount = 0; // 正确题数
+
+  // 页面加载时读取题库
+  window.onload = loadQuestions;
+
+  // 读取选中的Excel题库（按列位置解析：第1列=序号、第2列=英文、第3列=中文）
+  async function loadQuestions() {
+    const fileName = localStorage.getItem('selectedQuestionFile');
+    const progress = document.getElementById('progress');
+    const error = document.getElementById('error');
+
+    if (!fileName) {
+      error.textContent = "未选择题库，请返回上一页选择题库！";
+      return;
+    }
+
+    try {
+      progress.textContent = `正在加载题库：${fileName}...`;
+
+      // 1. 从GitHub获取文件
+      const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${FOLDER_PATH}/${fileName}`;
+      const response = await fetch(url, {
+        headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
+      });
+
+      if (!response.ok) {
+        throw new Error("题库文件不存在或已被删除");
+      }
+
+      // 2. 解析Base64内容
+      const fileData = await response.json();
+      const content = atob(fileData.content);
+      const arrayBuffer = new ArrayBuffer(content.length);
+      const uint8Array = new Uint8Array(arrayBuffer);
+      for (let i = 0; i < content.length; i++) {
+        uint8Array[i] = content.charCodeAt(i);
+      }
+
+      // 3. 读取Excel（按列位置解析，忽略表头）
+      const workbook = XLSX.read(arrayBuffer);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }); // 按行读取
+
+      // 4. 转换为题库格式（只取前3列，忽略空行）
+      questions = rawData
+        .filter(row => row.length >= 3 && row[0] && row[1] && row[2]) // 过滤空行/不完整行
+        .map(row => ({
+          序号: row[0],
+          英文: row[1],
+          中文: row[2]
+        }));
+
+      if (questions.length === 0) {
+        throw new Error("题库中无有效数据，请检查Excel文件！");
+      }
+
+      // 5. 开始答题
+      showCurrentQuestion();
+      document.getElementById('questionCard').style.display = 'block';
+    } catch (e) {
+      error.textContent = `加载题库失败：${e.message}`;
+      progress.textContent = "";
+    }
+  }
+
+  // 显示当前题目
+  function showCurrentQuestion() {
+    const progress = document.getElementById('progress');
+    const question = document.getElementById('question');
+    const answerInput = document.getElementById('answer');
+
+    // 更新进度
+    progress.textContent = `第 ${currentIndex + 1} 题 / 共 ${questions.length} 题`;
+
+    // 获取当前题目
+    const currentQ = questions[currentIndex];
+    // 随机出题：英译中/中译英（可选，也可以固定）
+    const isEn2Cn = Math.random() > 0.5;
+    localStorage.setItem('currentAnswer', isEn2Cn ? currentQ.中文 : currentQ.英文);
+
+    // 显示题目
+    question.textContent = isEn2Cn
+      ? `英译中：${currentQ.英文}`
+      : `中译英：${currentQ.中文}`;
+
+    // 清空答案输入框
+    answerInput.value = "";
+    answerInput.focus();
+  }
+
+  // 提交答案
+  function submitAnswer() {
+    const answerInput = document.getElementById('answer');
+    const userAnswer = answerInput.value.trim();
+    const correctAnswer = localStorage.getItem('currentAnswer').trim();
+
+    // 判分（忽略大小写、全角半角）
+    const isCorrect = userAnswer.toLowerCase() === correctAnswer.toLowerCase();
+    if (isCorrect) correctCount++;
+
+    // 下一题
+    currentIndex++;
+
+    // 判断是否答完
+    if (currentIndex >= questions.length) {
+      // 保存成绩并跳结果页
+      localStorage.setItem('testResult', JSON.stringify({
+        总题数: questions.length,
+        正确题数: correctCount,
+        得分: ((correctCount / questions.length) * 100).toFixed(1)
+      }));
+      location.href = 'result.html';
+    } else {
+      // 显示下一题
+      showCurrentQuestion();
+    }
+  }
+</script>
