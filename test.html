@@ -2,147 +2,218 @@
 <meta charset="utf-8">
 <title>答题页面</title>
 <style>
-  body{max-width:600px;margin:20px auto;font-family:Arial}
-  .question-card{border:1px solid #ccc;padding:20px;margin:20px 0;border-radius:8px}
-  .progress{text-align:center;font-size:18px;margin:10px 0}
-  .question{font-size:20px;margin:20px 0;padding:10px;background:#f9f9f9;border-radius:5px}
-  input{width:100%;padding:10px;font-size:16px;box-sizing:border-box;margin:20px 0;border:1px solid #ccc;border-radius:5px}
-  button{padding:10px 20px;font-size:16px;border:none;border-radius:5px;color:white;background:#2196F3;cursor:pointer}
-  .error{text-align:center;color:red;margin:20px 0}
+  body{max-width:600px;margin:20px auto;font-family:Arial;padding:0 20px}
+  .progress{text-align:center;font-size:18px;margin:10px 0;font-weight:bold}
+  .question-card{border:1px solid #ccc;padding:25px;border-radius:8px;margin:20px 0}
+  .question{font-size:20px;margin:20px 0;padding:15px;background:#f9f9f9;border-radius:8px;text-align:center}
+  input{width:100%;padding:12px;font-size:16px;border:1px solid #ccc;border-radius:8px;box-sizing:border-box;margin:20px 0}
+  button{width:100%;padding:12px;font-size:18px;border:none;border-radius:8px;color:white;background:#2196F3;cursor:pointer}
+  button:hover{opacity:0.9}
+  .error{text-align:center;color:red;font-size:16px;margin:20px 0;padding:15px;border:1px solid #f8d7da;background:#fef0f0;border-radius:8px}
 </style>
 <div class="progress" id="progress">加载题库中...</div>
 <div class="question-card" id="questionCard" style="display:none">
   <div class="question" id="question"></div>
-  <input type="text" id="answer" placeholder="请输入答案">
+  <input type="text" id="answer" placeholder="请输入你的答案" autofocus>
   <button onclick="submitAnswer()">提交并下一题</button>
 </div>
-<div class="error" id="error"></div>
+<div id="error" class="error" style="display:none"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-  // ========== 只改这2行！ ==========
-  const GITHUB_TOKEN = process.env.GITHUB_TOKEN || "默认值（可留空）"; // 替换成你的GitHub令牌
-  const GITHUB_REPO = "jojoWangkun/English-test"; // 你的仓库名（不用改）
+  // ✅ 第一步：先定义所有变量（顺序不能乱）
+  const GITHUB_TOKEN = process.env.GITHUB_TOKEN || ""; // Netlify环境变量
+  const GITHUB_REPO = "jojoWangkun/English-test"; // 先定义仓库名
   const FOLDER_PATH = "questions";
+  const SCORE_FILE = "答题成绩汇总.xlsx";
 
-  // 全局变量
-  let questions = []; // 题库数据：[{序号, 英文, 中文}, ...]
-  let currentIndex = 0; // 当前答题索引
-  let correctCount = 0; // 正确题数
+  // ✅ 第二步：再定义全局变量和函数
+  let questions = [];
+  let currentIndex = 0;
+  let correctCount = 0;
+  let userName = "";
+  let questionFileName = "";
 
-  // 页面加载时读取题库
-  window.onload = loadQuestions;
+  window.onload = init;
 
-  // 读取选中的Excel题库（按列位置解析：第1列=序号、第2列=英文、第3列=中文）
-  async function loadQuestions() {
-    const fileName = localStorage.getItem('selectedQuestionFile');
-    const progress = document.getElementById('progress');
-    const error = document.getElementById('error');
+  // 初始化：读取姓名+题库
+  async function init() {
+    const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+    const errorEl = document.getElementById('error');
 
-    if (!fileName) {
-      error.textContent = "未选择题库，请返回上一页选择题库！";
+    // 校验是否有姓名和题库
+    if (!userInfo || !userInfo.name || !userInfo.file) {
+      errorEl.style.display = "block";
+      errorEl.textContent = "请先返回上一页，输入姓名并选择题库！";
       return;
     }
+    userName = userInfo.name;
+    questionFileName = userInfo.file;
+
+    // 加载题库
+    await loadQuestions();
+  }
+
+  // 核心：读取GitHub里的无表头Excel（1列序号、2列英文、3列中文）
+  async function loadQuestions() {
+    const progress = document.getElementById('progress');
+    const errorEl = document.getElementById('error');
 
     try {
-      progress.textContent = `正在加载题库：${fileName}...`;
-
-      // 1. 从GitHub获取文件
-      const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${FOLDER_PATH}/${fileName}`;
-      const response = await fetch(url, {
+      progress.textContent = `加载题库：${questionFileName}...`;
+      // 这里使用之前定义的变量，顺序正确
+      const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${FOLDER_PATH}/${questionFileName}`;
+      const res = await fetch(url, {
         headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
       });
 
-      if (!response.ok) {
-        throw new Error("题库文件不存在或已被删除");
-      }
+      if (!res.ok) throw new Error("题库文件不存在，请检查！");
 
-      // 2. 解析Base64内容
-      const fileData = await response.json();
+      const fileData = await res.json();
+      // 解析Base64为Excel
       const content = atob(fileData.content);
       const arrayBuffer = new ArrayBuffer(content.length);
       const uint8Array = new Uint8Array(arrayBuffer);
-      for (let i = 0; i < content.length; i++) {
-        uint8Array[i] = content.charCodeAt(i);
-      }
+      for (let i = 0; i < content.length; i++) uint8Array[i] = content.charCodeAt(i);
 
-      // 3. 读取Excel（按列位置解析，忽略表头）
       const workbook = XLSX.read(arrayBuffer);
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }); // 按行读取
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 }); // 按行读取，忽略表头
 
-      // 4. 转换为题库格式（只取前3列，忽略空行）
-      questions = rawData
-        .filter(row => row.length >= 3 && row[0] && row[1] && row[2]) // 过滤空行/不完整行
-        .map(row => ({
-          序号: row[0],
-          英文: row[1],
-          中文: row[2]
-        }));
+      // 过滤有效数据（至少3列，非空）
+      questions = rawData.filter(row => row.length >= 3 && row[0] && row[1] && row[2]).map(row => ({
+        序号: row[0],
+        英文: row[1].toString().trim(),
+        中文: row[2].toString().trim()
+      }));
 
-      if (questions.length === 0) {
-        throw new Error("题库中无有效数据，请检查Excel文件！");
-      }
+      if (questions.length === 0) throw new Error("题库中无有效数据，请检查Excel格式！");
 
-      // 5. 开始答题
+      // 渲染第一题
+      document.getElementById('questionCard').style.display = "block";
       showCurrentQuestion();
-      document.getElementById('questionCard').style.display = 'block';
     } catch (e) {
-      error.textContent = `加载题库失败：${e.message}`;
+      errorEl.style.display = "block";
+      errorEl.textContent = e.message;
       progress.textContent = "";
     }
   }
 
-  // 显示当前题目
+  // 显示当前题目（随机英译中/中译英）
   function showCurrentQuestion() {
     const progress = document.getElementById('progress');
-    const question = document.getElementById('question');
-    const answerInput = document.getElementById('answer');
+    const questionEl = document.getElementById('question');
+    const answerEl = document.getElementById('answer');
 
-    // 更新进度
+    // 更新答题进度
     progress.textContent = `第 ${currentIndex + 1} 题 / 共 ${questions.length} 题`;
-
-    // 获取当前题目
     const currentQ = questions[currentIndex];
-    // 随机出题：英译中/中译英（可选，也可以固定）
+    // 随机出题类型
     const isEn2Cn = Math.random() > 0.5;
-    localStorage.setItem('currentAnswer', isEn2Cn ? currentQ.中文 : currentQ.英文);
-
+    // 保存正确答案到本地
+    localStorage.setItem('correctAns', isEn2Cn ? currentQ.中文 : currentQ.英文);
     // 显示题目
-    question.textContent = isEn2Cn
-      ? `英译中：${currentQ.英文}`
-      : `中译英：${currentQ.中文}`;
-
-    // 清空答案输入框
-    answerInput.value = "";
-    answerInput.focus();
+    questionEl.textContent = isEn2Cn ? `英译中：${currentQ.英文}` : `中译英：${currentQ.中文}`;
+    // 清空输入框
+    answerEl.value = "";
+    answerEl.focus();
   }
 
-  // 提交答案
+  // 提交答案并判分
   function submitAnswer() {
-    const answerInput = document.getElementById('answer');
-    const userAnswer = answerInput.value.trim();
-    const correctAnswer = localStorage.getItem('currentAnswer').trim();
+    const answerEl = document.getElementById('answer');
+    const userAns = answerEl.value.trim().toLowerCase();
+    const correctAns = localStorage.getItem('correctAns').trim().toLowerCase();
 
     // 判分（忽略大小写、全角半角）
-    const isCorrect = userAnswer.toLowerCase() === correctAnswer.toLowerCase();
-    if (isCorrect) correctCount++;
+    if (userAns === correctAns) correctCount++;
 
     // 下一题
     currentIndex++;
-
-    // 判断是否答完
     if (currentIndex >= questions.length) {
-      // 保存成绩并跳结果页
-      localStorage.setItem('testResult', JSON.stringify({
-        总题数: questions.length,
-        正确题数: correctCount,
-        得分: ((correctCount / questions.length) * 100).toFixed(1)
+      // 答完题：保存成绩到GitHub Excel，跳结果页
+      saveScoreToGitHub();
+      return;
+    }
+    // 继续答题
+    showCurrentQuestion();
+  }
+
+  // 自动保存成绩到GitHub的【答题成绩汇总.xlsx】
+  async function saveScoreToGitHub() {
+    const total = questions.length;
+    const score = ((correctCount / total) * 100).toFixed(1);
+    const now = new Date().toLocaleString();
+
+    try {
+      // 1. 先获取现有成绩文件（无则新建）
+      const scoreUrl = `https://api.github.com/repos/${GITHUB_REPO}/contents/${SCORE_FILE}`;
+      let res = await fetch(scoreUrl, {
+        headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
+      });
+
+      let sha = null;
+      let scoreData = [["姓名", "题库名称", "总题数", "正确题数", "得分", "答题时间"]]; // 表头
+
+      if (res.ok) {
+        // 有现有文件：解析并追加数据
+        const fileData = await res.json();
+        sha = fileData.sha;
+        const content = atob(fileData.content);
+        const arrayBuffer = new ArrayBuffer(content.length);
+        const uint8Array = new Uint8Array(arrayBuffer);
+        for (let i = 0; i < content.length; i++) uint8Array[i] = content.charCodeAt(i);
+
+        const workbook = XLSX.read(arrayBuffer);
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        scoreData = XLSX.utils.sheet_to_json(sheet, { header: 1 }); // 读取所有现有成绩
+      }
+
+      // 2. 追加新成绩
+      scoreData.push([userName, questionFileName, total, correctCount, score, now]);
+
+      // 3. 生成新Excel并转Base64
+      const workbook = XLSX.utils.book_new();
+      const sheet = XLSX.utils.aoa_to_sheet(scoreData);
+      XLSX.utils.book_append_sheet(workbook, sheet, "成绩汇总");
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      const base64Content = btoa(String.fromCharCode(...new Uint8Array(excelBuffer)));
+
+      // 4. 上传到GitHub（新建/更新）
+      await fetch(scoreUrl, {
+        method: sha ? "PUT" : "POST",
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: `保存${userName}的答题成绩`,
+          content: base64Content,
+          sha: sha,
+          branch: 'main'
+        })
+      });
+
+      // 5. 跳结果页
+      localStorage.setItem('result', JSON.stringify({
+        name: userName,
+        file: questionFileName,
+        total: total,
+        correct: correctCount,
+        score: score
       }));
       location.href = 'result.html';
-    } else {
-      // 显示下一题
-      showCurrentQuestion();
+    } catch (e) {
+      alert(`成绩保存失败：${e.message}，但答题已完成！`);
+      // 即使保存失败，也跳结果页
+      localStorage.setItem('result', JSON.stringify({
+        name: userName,
+        file: questionFileName,
+        total: total,
+        correct: correctCount,
+        score: score
+      }));
+      location.href = 'result.html';
     }
   }
 </script>
