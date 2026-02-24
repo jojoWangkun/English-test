@@ -20,57 +20,63 @@
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-  // ✅ 第一步：先定义所有变量（顺序不能乱）
-  const GITHUB_TOKEN = process.env.GITHUB_TOKEN || ""; // Netlify环境变量，本地测试可填令牌
-  const GITHUB_REPO = "jojoWangkun/English-test"; // 先定义仓库名
+  // 全局变量（先定义后使用）
+  const GITHUB_TOKEN = process.env.GITHUB_TOKEN || ""; // 本地测试可临时填令牌：|| "ghp_你的令牌"
+  const GITHUB_REPO = "jojoWangkun/English-test";
   const FOLDER_PATH = "questions";
 
-  // ✅ 第二步：再使用变量
   window.onload = loadFileList;
 
-  // 加载questions文件夹里的所有Excel题库
+  // 加载题库文件列表
   async function loadFileList() {
     const fileList = document.getElementById('fileList');
     try {
-      // 这里才用到之前定义的变量，顺序正确
-      const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${FOLDER_PATH}`;
-      const res = await fetch(url, {
-        headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
+      const requestUrl = `https://api.github.com/repos/${GITHUB_REPO}/contents/${FOLDER_PATH}`;
+      const response = await fetch(requestUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${GITHUB_TOKEN}`, // 核心：token改Bearer
+          'Accept': 'application/vnd.github.v3+json', // 新增API版本
+          'Content-Type': 'application/json'
+        },
+        mode: 'cors' // 允许跨域
       });
 
-      if (!res.ok) {
-        fileList.innerHTML = "<div class='empty'>暂无题库，请联系出题人上传</div>";
+      if (!response.ok) {
+        fileList.innerHTML = "<div class='empty'>题库加载失败，请检查GitHub配置</div>";
         return;
       }
 
-      const files = await res.json();
-      const excelFiles = files.filter(f => f.name.endsWith('.xlsx'));
+      const files = await response.json();
+      const excelFiles = files.filter(file => file.name.endsWith('.xlsx'));
 
       if (excelFiles.length === 0) {
-        fileList.innerHTML = "<div class='empty'>暂无题库，请联系出题人上传</div>";
+        fileList.innerHTML = "<div class='empty'>暂无可用题库，请将Excel拖入GitHub的questions文件夹</div>";
         return;
       }
 
-      // 渲染题库按钮
-      let html = "";
-      excelFiles.forEach(f => {
-        html += `<button class="btn" onclick="startTest('${f.name}')">${f.name}</button>`;
+      let btnHtml = "";
+      excelFiles.forEach(file => {
+        btnHtml += `<button class="btn" onclick="startTest('${file.name}')">${file.name}</button>`;
       });
-      fileList.innerHTML = html;
-    } catch (e) {
-      fileList.innerHTML = `<div class='empty'>加载题库失败：${e.message}</div>`;
+      fileList.innerHTML = btnHtml;
+    } catch (error) {
+      fileList.innerHTML = `<div class='empty'>加载失败：${error.message}</div>`;
+      console.error("题库加载错误：", error);
     }
   }
 
-  // 选择题库，跳答题页
+  // 跳转到答题页
   function startTest(fileName) {
     const userName = document.getElementById('userName').value.trim();
     if (!userName) {
-      alert("请先输入姓名！");
+      alert("请先输入你的姓名！");
       return;
     }
-    // 保存姓名和题库名到本地
-    localStorage.setItem('userInfo', JSON.stringify({name: userName, file: fileName}));
+    localStorage.setItem('userInfo', JSON.stringify({
+      name: userName,
+      file: fileName
+    }));
     location.href = 'test.html';
   }
 </script>
