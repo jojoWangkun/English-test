@@ -1,59 +1,76 @@
 <!DOCTYPE html>
 <meta charset="utf-8">
-<title>答题入口</title>
+<title>答题入口-选择题库</title>
 <style>
-  body{max-width:500px;margin:50px auto;font-family:Arial}
-  .btn{display:block;width:100%;padding:15px;margin:10px 0;font-size:18px;border:none;border-radius:8px;color:white;cursor:pointer;background:#4CAF50}
+  body{max-width:500px;margin:50px auto;font-family:Arial;padding:0 20px}
+  .form-group{margin:20px 0}
+  label{display:block;margin-bottom:8px;font-weight:bold;font-size:16px}
+  input{width:100%;padding:12px;border:1px solid #ccc;border-radius:8px;font-size:16px;box-sizing:border-box}
+  .btn{width:100%;padding:15px;font-size:18px;border:none;border-radius:8px;color:white;background:#4CAF50;cursor:pointer;margin:5px 0}
   .btn:hover{opacity:0.9}
-  .empty{text-align:center;color:#666;margin:20px 0;padding:20px;border:1px solid #eee;border-radius:8px}
+  .empty{text-align:center;padding:30px;color:#666;border:1px dashed #ccc;border-radius:8px;margin:20px 0}
+  .loading{text-align:center;color:#666;margin:20px 0}
 </style>
-<h1>选择题库开始答题</h1>
-<div id="fileList"></div>
+<h1>开始答题</h1>
+<div class="form-group">
+  <label for="userName">请输入你的姓名：</label>
+  <input type="text" id="userName" placeholder="例如：张三" required>
+</div>
+<div id="fileList" class="loading">正在加载题库...</div>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-  // ========== 只改这2行！ ==========
-  const GITHUB_TOKEN = process.env.GITHUB_TOKEN || "默认值（可留空）"; // 替换成你的GitHub令牌
-  const GITHUB_REPO = "jojoWangkun/English-test"; // 你的仓库名（不用改）
+  // ✅ 第一步：先定义所有变量（顺序不能乱）
+  const GITHUB_TOKEN = process.env.GITHUB_TOKEN || ""; // Netlify环境变量，本地测试可填令牌
+  const GITHUB_REPO = "jojoWangkun/English-test"; // 先定义仓库名
   const FOLDER_PATH = "questions";
 
-  // 加载题库列表
+  // ✅ 第二步：再使用变量
   window.onload = loadFileList;
 
+  // 加载questions文件夹里的所有Excel题库
   async function loadFileList() {
     const fileList = document.getElementById('fileList');
-    fileList.textContent = "加载题库列表中...";
-
     try {
+      // 这里才用到之前定义的变量，顺序正确
       const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${FOLDER_PATH}`;
-      const response = await fetch(url, {
+      const res = await fetch(url, {
         headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
       });
 
-      if (response.ok) {
-        const files = await response.json();
-        const excelFiles = files.filter(file => file.name.endsWith('.xlsx'));
-
-        if (excelFiles.length === 0) {
-          fileList.innerHTML = "<div class='empty'>暂无可用题库，请联系出题人上传</div>";
-          return;
-        }
-
-        // 渲染题库按钮
-        fileList.innerHTML = excelFiles.map(file => `
-          <button class="btn" onclick="startTest('${file.name}')">${file.name}</button>
-        `).join('');
-      } else {
-        throw new Error("加载失败，请刷新页面");
+      if (!res.ok) {
+        fileList.innerHTML = "<div class='empty'>暂无题库，请联系出题人上传</div>";
+        return;
       }
+
+      const files = await res.json();
+      const excelFiles = files.filter(f => f.name.endsWith('.xlsx'));
+
+      if (excelFiles.length === 0) {
+        fileList.innerHTML = "<div class='empty'>暂无题库，请联系出题人上传</div>";
+        return;
+      }
+
+      // 渲染题库按钮
+      let html = "";
+      excelFiles.forEach(f => {
+        html += `<button class="btn" onclick="startTest('${f.name}')">${f.name}</button>`;
+      });
+      fileList.innerHTML = html;
     } catch (e) {
       fileList.innerHTML = `<div class='empty'>加载题库失败：${e.message}</div>`;
     }
   }
 
-  // 选择题库，跳转到答题页
+  // 选择题库，跳答题页
   function startTest(fileName) {
-    localStorage.setItem('selectedQuestionFile', fileName);
+    const userName = document.getElementById('userName').value.trim();
+    if (!userName) {
+      alert("请先输入姓名！");
+      return;
+    }
+    // 保存姓名和题库名到本地
+    localStorage.setItem('userInfo', JSON.stringify({name: userName, file: fileName}));
     location.href = 'test.html';
   }
 </script>
