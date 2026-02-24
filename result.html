@@ -2,39 +2,50 @@
 <meta charset="utf-8">
 <title>答题结果</title>
 <style>
-  body{max-width:500px;margin:50px auto;text-align:center;font-family:Arial}
-  .result-card{border:1px solid #ccc;padding:30px;border-radius:8px;background:#f9f9f9}
-  .score{font-size:24px;margin:20px 0;color:#2196F3}
-  .btn{display:inline-block;padding:12px 24px;margin:20px 0;font-size:16px;text-decoration:none;color:white;background:#4CAF50;border-radius:5px}
+  body{max-width:500px;margin:50px auto;font-family:Arial;text-align:center;padding:0 20px}
+  .result-card{border:1px solid #ccc;padding:30px;border-radius:12px;background:#f9f9f9;margin:20px 0}
+  h1{color:#2196F3;margin-bottom:20px}
+  .info{font-size:18px;margin:15px 0;line-height:1.8}
+  .score{font-size:32px;font-weight:bold;color:#4CAF50;margin:20px 0;padding:10px;background:#e8f5e9;border-radius:8px}
+  .btn{display:inline-block;padding:12px 30px;margin:10px;font-size:16px;text-decoration:none;color:white;border-radius:8px;cursor:pointer}
+  .btn-again{background:#4CAF50}
+  .btn-home{background:#2196F3}
   .btn:hover{opacity:0.9}
 </style>
 <div class="result-card">
   <h1>答题完成！</h1>
+  <div class="info" id="userName"></div>
+  <div class="info" id="questionFile"></div>
+  <div class="info">总题数：<span id="total"></span> 题</div>
+  <div class="info">正确题数：<span id="correct"></span> 题</div>
+  <div class="info">错误题数：<span id="wrong"></span> 题</div>
   <div class="score" id="score"></div>
-  <div id="detail"></div>
-  <a href="student.html" class="btn">重新答题</a>
-  <a href="index.html" class="btn" style="background:#2196F3">返回首页</a>
+  <a href="student.html" class="btn btn-again">重新答题</a>
+  <a href="index.html" class="btn btn-home">返回首页</a>
 </div>
 
 <script>
-  // 读取答题结果
   window.onload = function() {
-    const result = JSON.parse(localStorage.getItem('testResult'));
-    const score = document.getElementById('score');
-    const detail = document.getElementById('detail');
+    const result = JSON.parse(localStorage.getItem('result'));
+    const resultCard = document.querySelector('.result-card');
 
     if (!result) {
-      score.textContent = "暂无答题结果";
-      detail.textContent = "请先完成答题";
+      resultCard.innerHTML = `<h1>暂无答题结果</h1><a href="student.html" class="btn btn-again">立即去答题</a>`;
       return;
     }
 
-    // 显示结果
-    score.textContent = `最终得分：${result.得分} 分`;
-    detail.textContent = `总题数：${result.总题数} 题 | 正确：${result.正确题数} 题 | 错误：${result.总题数 - result.正确题数} 题`;
+    const wrongCount = result.total - result.correct;
 
-    // 清空本地存储（可选）
-    localStorage.removeItem('selectedQuestionFile');
-    localStorage.removeItem('currentAnswer');
+    document.getElementById('userName').textContent = `答题人：${result.name}`;
+    document.getElementById('questionFile').textContent = `使用题库：${result.file}`;
+    document.getElementById('total').textContent = result.total;
+    document.getElementById('correct').textContent = result.correct;
+    document.getElementById('wrong').textContent = wrongCount;
+    document.getElementById('score').textContent = `最终得分：${result.score} 分`;
+
+    // 清空临时数据
+    localStorage.removeItem('userInfo');
+    localStorage.removeItem('correctAns');
+    localStorage.removeItem('result');
   };
 </script>
