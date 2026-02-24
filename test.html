@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>答题界面 - 英语考核系统</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        .container { border: 1px solid #ccc; padding: 30px; border-radius: 10px; }
+        h1 { text-align: center; color: #333; }
+        .progress { text-align: center; font-size: 18px; margin: 20px 0; }
+        .question { font-size: 20px; margin: 30px 0; padding: 20px; background-color: #f9f9f9; border-radius: 5px; }
+        .form-group { margin: 30px 0; }
+        input[type="text"] { width: 100%; padding: 12px; font-size: 18px; border: 1px solid #ccc; border-radius: 5px; }
+        button { width: 100%; padding: 12px; font-size: 18px; background-color: #2196F3; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background-color: #0b7dda; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>英语翻译答题</h1>
+        <div class="progress" id="progress">题目 1 / 10</div>
+        <div class="question" id="question">加载中...</div>
+        <form id="answerForm">
+            <div class="form-group">
+                <input type="text" id="answer" name="answer" placeholder="请输入你的答案..." required autofocus>
+            </div>
+            <button type="submit">提交答案并进入下一题</button>
+        </form>
+    </div>
+
+    <script>
+        // 读取本地存储的答题数据
+        const testData = JSON.parse(localStorage.getItem("testData"));
+
+        // 验证是否有答题数据
+        if (!testData) {
+            alert("请先从首页开始答题！");
+            window.location.href = "index.html";
+        }
+
+        // 渲染当前题目
+        function renderCurrentQuestion() {
+            const { questions, questionTypes, currentIndex } = testData;
+            const total = questions.length;
+
+            // 更新进度
+            document.getElementById("progress").textContent = `题目 ${currentIndex + 1} / ${total}`;
+
+            // 获取当前题目
+            const currentQ = questions[currentIndex];
+            const currentType = questionTypes[currentIndex];
+
+            // 渲染题目文本
+            let questionText = "";
+            if (currentType === "en2cn") {
+                questionText = `请翻译（英译中）：${currentQ.英文}`;
+            } else {
+                questionText = `请翻译（中译英）：${currentQ.中文}`;
+            }
+            document.getElementById("question").textContent = questionText;
+
+            // 填充已答过的答案
+            const currentAnswer = testData.answers[currentQ.编号] || "";
+            document.getElementById("answer").value = currentAnswer;
+        }
+
+        // 提交答案
+        document.getElementById("answerForm").addEventListener("submit", (e) => {
+            e.preventDefault();
+            const answer = document.getElementById("answer").value.trim();
+            const currentQ = testData.questions[testData.currentIndex];
+
+            // 保存答案
+            testData.answers[currentQ.编号] = answer;
+
+            // 下一题
+            testData.currentIndex += 1;
+
+            // 判断是否答完
+            if (testData.currentIndex >= testData.questions.length) {
+                // 保存数据并跳转到结果页
+                localStorage.setItem("testData", JSON.stringify(testData));
+                window.location.href = "result.html";
+            } else {
+                // 保存数据并重新渲染
+                localStorage.setItem("testData", JSON.stringify(testData));
+                renderCurrentQuestion();
+                // 清空输入框
+                document.getElementById("answer").value = "";
+                document.getElementById("answer").focus();
+            }
+        });
+
+        // 初始化渲染
+        renderCurrentQuestion();
+    </script>
+</body>
+</html>

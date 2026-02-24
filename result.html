@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>答题结果 - 英语考核系统</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 20px auto; padding: 20px; }
+        .container { border: 1px solid #ccc; padding: 30px; border-radius: 10px; }
+        h1 { text-align: center; color: #333; }
+        .summary { text-align: center; font-size: 20px; margin: 20px 0; padding: 10px; background-color: #f0f0f0; border-radius: 5px; }
+        table { width: 100%; border-collapse: collapse; margin: 30px 0; }
+        th, td { border: 1px solid #ccc; padding: 12px; text-align: left; }
+        th { background-color: #f0f0f0; font-weight: bold; }
+        .correct { color: green; font-weight: bold; }
+        .incorrect { color: red; font-weight: bold; }
+        .btn { display: block; width: 200px; margin: 20px auto; padding: 10px; text-align: center; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px; }
+        .btn:hover { background-color: #45a049; }
+        .loading { text-align: center; font-size: 18px; color: #666; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 id="title">答题结果 - 加载中...</h1>
+        <div class="summary" id="summary">加载中...</div>
+        <div class="loading" id="loading">正在保存成绩...</div>
+        <table id="resultTable" style="display: none;">
+            <tr>
+                <th>序号</th>
+                <th>题型</th>
+                <th>题目</th>
+                <th>你的答案</th>
+                <th>正确答案</th>
+                <th>结果</th>
+            </tr>
+        </table>
+        <a href="index.html" class="btn" style="display: none;" id="backBtn">返回首页</a>
+    </div>
+
+    <script>
+        // ========== 配置项（和index.html一致） ==========
+        const GITEE_TOKEN = "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";
+        const GITEE_REPO = "jojoWangkun/English-test";
+        const SCORE_FILE = "答题成绩汇总.xlsx";
+
+        // ========== 工具函数 ==========
+        // 读取Gitee文件
+        async function getGiteeFile(fileName) {
+            const username = GITEE_REPO.split("/")[0];
+            const repo = GITEE_REPO.split("/")[1];
+            const url = `https://gitee.com/api/v5/repos/${username}/${repo}/contents/${fileName}`;
+
+            try {
+                const res = await fetch(url, {
+                    headers: { "Authorization": `token ${GITEE_TOKEN}` }
+                });
+                if (res.status === 200) {
+                    const data = await res.json();
+                    return { content: data.content, sha: data.sha };
+                }
+            } catch (e) {
+                console.error("读取Gitee文件失败：", e);
+            }
+            return { content: null, sha: null };
+        }
+
+        // 上传文件到Gitee
+        async function uploadToGitee(fileName, content, sha = null) {
+            const username = GITEE_REPO.split("/")[0];
+            const repo = GITEE_REPO.split("/")[1];
+            const url = `https://gitee.com/api/v5/repos/${username}/${repo}/contents/${fileName}`;
+
+            try {
+                const data = {
+                    access_token: GITEE_TOKEN,
+                    content: btoa(unescape(encodeURIComponent(content))), // 编码为base64
+                    message: `Add score - ${new Date().toLocaleString()}`
+                };
+                if (sha) data.sha = sha;
+
+                const res = await fetch(url, {
+                    method: sha ? "PUT" : "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(data)
+                });
+                return res.ok;
+            } catch (e) {
+                console.error("上传成绩失败：", e);
+                return false;
+            }
+        }
+
+        // 保存成绩到Gitee Excel
+        async function saveScore(name, score, total, correct, mode) {
+            // 1. 获取现有成绩
+            const { content: scoreContent, sha } = await getGiteeFile(SCORE_FILE);
+            let rows = [];
+
+            if (scoreContent) {
+                // 解析现有Excel
+                const decoded = atob(scoreContent);
+                const arrayBuffer = new ArrayBuffer(decoded.length);
+                const uint8Array = new Uint8Array(arrayBuffer);
+                for (let i = 0; i < decoded.length; i++) {
+                    uint8Array[i] = decoded.charCodeAt(i);
+                }
+                const workbook = XLSX.read(arrayBuffer);
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                rows = XLSX.utils.sheet_to_json(sheet, { header: ["姓名", "答题模式", "总题数", "正确题数", "得分", "答题时间"] });
+            } else {
+                // 新建表头
+                rows = [["姓名", "答题模式", "总题数", "正确题数", "得分", "答题时间"]];
+            }
+
+            // 2. 添加新成绩
+            rows.push([
+                name,
+                mode,
+                total,
+                correct,
+                score.toFixed(1),
+                new Date().toLocaleString()
+            ]);
+
+            // 3. 生成新Excel
+            const newWorkbook = XLSX.utils.book_new();
+            const newSheet = XLSX.utils.aoa_to_sheet(rows);
+            XLSX.utils.book_append_sheet(newWorkbook, newSheet, "成绩汇总");
+            const excelBuffer = XLSX.write(newWorkbook, { bookType: "xlsx", type: "array" });
+
+            // 4. 转换为base64并上传
+            const binary = String.fromCharCode(...new Uint8Array(excelBuffer));
+            const base64Content = btoa(binary);
+            return await uploadToGitee(SCORE_FILE, base64Content, sha);
+        }
+
+        // ========== 主逻辑 ==========
+        async function renderResult() {
+            const testData = JSON.parse(localStorage.getItem("testData"));
+            if (!testData) {
+                alert("无答题数据！");
+                window.location.href = "index.html";
+                return;
+            }
+
+            const { name, mode, questions, questionTypes, answers } = testData;
+            const total = questions.length;
+            let correct = 0;
+            const results = [];
+
+            // 判分
+            questions.forEach((q, index) => {
+                const qType = questionTypes[index];
+                const userAns = answers[q.编号] || "";
+                const userAnsLower = userAns.toLowerCase().trim();
+                let correctAns = "";
+                let isCorrect = false;
+                let typeText = "";
+                let questionText = "";
+
+                if (qType === "en2cn") {
+                    typeText = "英译中";
+                    questionText = q.英文;
+                    correctAns = q.中文.trim();
+                    const correctAnsLower = correctAns.toLowerCase();
+                    // 模糊匹配
+                    isCorrect = userAnsLower === correctAnsLower ||
+                                (userAnsLower && correctAnsLower.split(" ").every(w => userAnsLower.includes(w)));
+                } else {
+                    typeText = "中译英";
+                    questionText = q.中文;
+                    correctAns = q.英文.trim();
+                    isCorrect = userAnsLower === correctAnsLower;
+                }
+
+                if (isCorrect) correct++;
+                results.push({
+                    index: index + 1,
+                    type: typeText,
+                    question: questionText,
+                    userAns,
+                    correctAns,
+                    isCorrect
+                });
+            });
+
+            // 计算得分
+            const score = total > 0 ? (correct / total) * 100 : 0;
+
+            // 保存成绩到Gitee
+            await saveScore(name, score, total, correct, mode);
+
+            // 渲染页面
+            document.getElementById("title").textContent = `答题结果 - ${name}`;
+            document.getElementById("summary").textContent = `总题数：${total} &nbsp;&nbsp; 正确题数：${correct} &nbsp;&nbsp; 得分：${score.toFixed(1)} 分`;
+            document.getElementById("loading").style.display = "none";
+
+            // 渲染表格
+            const table = document.getElementById("resultTable");
+            results.forEach(res => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${res.index}</td>
+                    <td>${res.type}</td>
+                    <td>${res.question}</td>
+                    <td class="${res.isCorrect ? '' : 'incorrect'}">${res.userAns}</td>
+                    <td>${res.correctAns}</td>
+                    <td class="${res.isCorrect ? 'correct' : 'incorrect'}">${res.isCorrect ? '正确' : '错误'}</td>
+                `;
+                table.appendChild(tr);
+            });
+            table.style.display = "table";
+            document.getElementById("backBtn").style.display = "block";
+
+            // 清空本地存储
+            localStorage.removeItem("testData");
+        }
+
+        // 引入SheetJS
+        const script = document.createElement("script");
+        script.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+        script.onload = renderResult;
+        document.head.appendChild(script);
+    </script>
+</body>
+</html>
