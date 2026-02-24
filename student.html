@@ -21,7 +21,10 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
   // ✅ 修复process未定义：本地直接填令牌
-  const GITHUB_TOKEN = "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";
+  const GITHUB_TOKEN =
+  typeof process !== "undefined" && process.env.GITHUB_TOKEN
+    ? process.env.GITHUB_TOKEN
+    : "";
   const GITHUB_REPO = "jojoWangkun/English-test";
   const FOLDER_PATH = "questions";
 
