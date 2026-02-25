@@ -1,21 +1,105 @@
 <!DOCTYPE html>
 <meta charset="utf-8">
-<title>选择题库</title>
+<title>选择题库 | 英语答题系统</title>
 <style>
-  body{max-width:500px;margin:50px auto;font-family:Arial;padding:0 20px}
-  .form-group{margin:20px 0}
-  label{display:block;margin-bottom:8px;font-weight:bold}
-  input{width:100%;padding:12px;border:1px solid #ccc;border-radius:8px;font-size:16px;box-sizing:border-box}
-  .btn{width:100%;padding:15px;font-size:18px;border:none;border-radius:8px;color:white;background:#4CAF50;margin:5px 0;cursor:pointer}
-  .empty{text-align:center;padding:30px;color:#666;border:1px dashed #ccc;border-radius:8px;margin:20px 0}
-  .loading{text-align:center;color:#666;margin:20px 0}
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Microsoft YaHei', Arial, sans-serif;
+  }
+  body {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .container {
+    max-width: 500px;
+    width: 100%;
+    margin: 30px auto;
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    padding: 30px;
+  }
+  h1 {
+    color: #2c3e50;
+    margin-bottom: 25px;
+    font-size: 24px;
+    font-weight: 600;
+    text-align: center;
+  }
+  .form-group {
+    margin-bottom: 20px;
+  }
+  label {
+    display: block;
+    margin-bottom: 8px;
+    color: #34495e;
+    font-weight: 500;
+    font-size: 16px;
+  }
+  input {
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid #e1e8ed;
+    border-radius: 10px;
+    font-size: 16px;
+    transition: border 0.3s ease;
+  }
+  input:focus {
+    outline: none;
+    border-color: #4CAF50;
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+  }
+  .file-list {
+    margin-top: 20px;
+  }
+  .loading, .empty {
+    text-align: center;
+    padding: 30px;
+    color: #7f8c8d;
+    font-size: 16px;
+  }
+  .loading {
+    color: #3498db;
+  }
+  .file-btn {
+    width: 100%;
+    padding: 16px;
+    margin: 8px 0;
+    font-size: 16px;
+    border: none;
+    border-radius: 10px;
+    color: white;
+    cursor: pointer;
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.2);
+    transition: all 0.3s ease;
+  }
+  .file-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(52, 152, 219, 0.3);
+  }
+  .back-btn {
+    display: inline-block;
+    margin-top: 20px;
+    color: #3498db;
+    text-decoration: none;
+    font-size: 15px;
+  }
 </style>
-<h1>开始答题</h1>
-<div class="form-group">
-  <label>姓名</label>
-  <input type="text" id="userName" placeholder="输入姓名" required>
+<div class="container">
+  <h1>✏️ 开始答题</h1>
+  <div class="form-group">
+    <label for="userName">请输入你的姓名</label>
+    <input type="text" id="userName" placeholder="例如：张三" required>
+  </div>
+  <div class="file-list" id="fileList">
+    <div class="loading">🔄 正在加载题库...</div>
+  </div>
+  <a href="index.html" class="back-btn">← 返回首页</a>
 </div>
-<div id="fileList" class="loading">加载题库中...</div>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
@@ -24,30 +108,47 @@ const FOLDER = "questions";
 
 window.onload = loadFileList;
 
+// 加载题库列表
 async function loadFileList() {
   const el = document.getElementById('fileList');
   try {
-    const r = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${FOLDER}`);
-    const files = await r.json();
-    const list = files.filter(f => f.name.endsWith('.xlsx'));
-    if (list.length === 0) {
-      el.innerHTML = "<div class='empty'>暂无题库</div>";
+    const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${FOLDER}`);
+    if (!response.ok) throw new Error("题库加载失败");
+    
+    const files = await response.json();
+    const excelFiles = files.filter(file => file.name.endsWith('.xlsx'));
+    
+    if (excelFiles.length === 0) {
+      el.innerHTML = "<div class='empty'>📂 暂无可用题库</div>";
       return;
     }
+    
     let html = '';
-    list.forEach(f => {
-      html += `<button class="btn" onclick="go('${f.name}')">${f.name}</button>`;
+    excelFiles.forEach(file => {
+      html += `<button class="file-btn" onclick="startTest('${file.name}')">📚 ${file.name}</button>`;
     });
     el.innerHTML = html;
-  } catch (e) {
-    el.innerHTML = "<div class='empty'>加载失败</div>";
+  } catch (error) {
+    el.innerHTML = `<div class="empty">❌ 加载失败：${error.message}</div>`;
+    console.error("题库加载错误：", error);
   }
 }
 
-function go(file) {
-  const name = document.getElementById('userName').value.trim();
-  if (!name) { alert('请输入姓名'); return; }
-  localStorage.setItem('user', JSON.stringify({ name, file }));
+// 开始答题
+function startTest(fileName) {
+  const userName = document.getElementById('userName').value.trim();
+  if (!userName) {
+    alert("请先输入你的姓名！");
+    return;
+  }
+  
+  // 保存用户信息
+  localStorage.setItem('userInfo', JSON.stringify({
+    name: userName,
+    file: fileName,
+    startTime: new Date().getTime() // 记录答题开始时间
+  }));
+  
   location.href = 'test.html';
 }
 </script>
