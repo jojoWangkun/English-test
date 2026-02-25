@@ -52,7 +52,7 @@
     border-color: #4CAF50;
     box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
   }
-  .file-list {
+  .file-list, .direction-list {
     margin-top: 20px;
   }
   .loading, .empty {
@@ -64,7 +64,7 @@
   .loading {
     color: #3498db;
   }
-  .file-btn {
+  .file-btn, .direction-btn {
     width: 100%;
     padding: 16px;
     margin: 8px 0;
@@ -73,13 +73,19 @@
     border-radius: 10px;
     color: white;
     cursor: pointer;
-    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
-    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.2);
     transition: all 0.3s ease;
   }
-  .file-btn:hover {
+  .file-btn {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.2);
+  }
+  .direction-btn {
+    background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+    box-shadow: 0 4px 12px rgba(155, 89, 182, 0.2);
+  }
+  .file-btn:hover, .direction-btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 15px rgba(52, 152, 219, 0.3);
+    box-shadow: 0 6px 15px rgba(0,0,0,0.2);
   }
   .back-btn {
     display: inline-block;
@@ -88,16 +94,37 @@
     text-decoration: none;
     font-size: 15px;
   }
+  .step-title {
+    font-size: 18px;
+    color: #2c3e50;
+    margin: 25px 0 15px 0;
+    font-weight: 600;
+  }
+  .hidden {
+    display: none;
+  }
 </style>
 <div class="container">
   <h1>✏️ 开始答题</h1>
+  
+  <!-- 步骤1：输入姓名 -->
   <div class="form-group">
     <label for="userName">请输入你的姓名</label>
     <input type="text" id="userName" placeholder="例如：张三" required>
   </div>
+  
+  <!-- 步骤2：选择题库 -->
+  <div class="step-title">步骤1：选择题库</div>
   <div class="file-list" id="fileList">
     <div class="loading">🔄 正在加载题库...</div>
   </div>
+  
+  <!-- 步骤3：选择翻译方向（初始隐藏） -->
+  <div class="step-title" id="directionTitle" class="hidden">步骤2：选择翻译方向</div>
+  <div class="direction-list" id="directionList" class="hidden">
+    <!-- 翻译方向按钮会动态生成 -->
+  </div>
+  
   <a href="index.html" class="back-btn">← 返回首页</a>
 </div>
 
@@ -105,6 +132,9 @@
 <script>
 const GITHUB_REPO = "jojoWangkun/English-test";
 const FOLDER = "questions";
+
+let selectedFile = "";
+let fileType = ""; // cn:中英, vn:英越
 
 window.onload = loadFileList;
 
@@ -125,7 +155,7 @@ async function loadFileList() {
     
     let html = '';
     excelFiles.forEach(file => {
-      html += `<button class="file-btn" onclick="startTest('${file.name}')">📚 ${file.name}</button>`;
+      html += `<button class="file-btn" onclick="selectFile('${file.name}')">📚 ${file.name}</button>`;
     });
     el.innerHTML = html;
   } catch (error) {
@@ -134,8 +164,73 @@ async function loadFileList() {
   }
 }
 
+// 选择题库并检测类型
+async function selectFile(fileName) {
+  selectedFile = fileName;
+  
+  // 加载文件检测类型
+  try {
+    const requestUrl = `https://api.github.com/repos/${GITHUB_REPO}/contents/${FOLDER}/${fileName}`;
+    const response = await fetch(requestUrl);
+    const fileData = await response.json();
+    const content = atob(fileData.content);
+    const uint8Array = new Uint8Array(content.length);
+    for (let i = 0; i < content.length; i++) {
+      uint8Array[i] = content.charCodeAt(i);
+    }
+
+    const workbook = XLSX.read(uint8Array);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    
+    // 检测类型
+    const firstValidRow = rawData.find(row => row.length >=3 && row[1]);
+    if (firstValidRow && firstValidRow[2]) {
+      fileType = "cn"; // 中英
+    } else if (firstValidRow && firstValidRow.length >=4 && firstValidRow[3]) {
+      fileType = "vn"; // 英越
+    } else {
+      alert("题库格式错误！请检查Excel列数");
+      return;
+    }
+    
+    // 显示翻译方向选择
+    document.getElementById('directionTitle').classList.remove('hidden');
+    document.getElementById('directionList').classList.remove('hidden');
+    renderDirectionButtons();
+    
+  } catch (error) {
+    alert(`检测题库类型失败：${error.message}`);
+    console.error(error);
+  }
+}
+
+// 生成翻译方向按钮
+function renderDirectionButtons() {
+  const el = document.getElementById('directionList');
+  let html = '';
+  
+  if (fileType === "cn") {
+    // 中英翻译方向
+    html += `
+      <button class="direction-btn" onclick="startTest('cn2en')">中译英</button>
+      <button class="direction-btn" onclick="startTest('en2cn')">英译中</button>
+      <button class="direction-btn" onclick="startTest('both')">中英互译</button>
+    `;
+  } else {
+    // 英越翻译方向（越南语显示）
+    html += `
+      <button class="direction-btn" onclick="startTest('vn2en')">Tiếng Việt sang Tiếng Anh (越译英)</button>
+      <button class="direction-btn" onclick="startTest('en2vn')">Tiếng Anh sang Tiếng Việt (英译越)</button>
+      <button class="direction-btn" onclick="startTest('both')">Đối dịch lẫn nhau (英越互译)</button>
+    `;
+  }
+  
+  el.innerHTML = html;
+}
+
 // 开始答题
-function startTest(fileName) {
+function startTest(direction) {
   const userName = document.getElementById('userName').value.trim();
   if (!userName) {
     alert("请先输入你的姓名！");
@@ -145,8 +240,10 @@ function startTest(fileName) {
   // 保存用户信息
   localStorage.setItem('userInfo', JSON.stringify({
     name: userName,
-    file: fileName,
-    startTime: new Date().getTime() // 记录答题开始时间
+    file: selectedFile,
+    type: fileType,
+    direction: direction,
+    startTime: new Date().getTime()
   }));
   
   location.href = 'test.html';
