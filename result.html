@@ -104,6 +104,11 @@
   .question-item .target {
     color: #555;
   }
+  .question-item .user-ans {
+    font-size: 14px;
+    margin-top: 8px;
+    color: #7f8c8d;
+  }
   .right {
     border-left: 5px solid #4CAF50;
     background-color: #f9fffa;
@@ -153,10 +158,11 @@
 window.onload = function () {
   // 获取答题结果和记录
   const result = JSON.parse(localStorage.getItem('result'));
+  const shuffledQuestions = JSON.parse(localStorage.getItem('shuffledQuestions') || '[]');
   const userAnswers = JSON.parse(localStorage.getItem('userAnswers') || '[]');
 
   // 无结果时跳转
-  if (!result || userAnswers.length === 0) {
+  if (!result || !shuffledQuestions.length || !userAnswers.length) {
     alert('暂无答题结果');
     location.href = 'student.html';
     return;
@@ -171,26 +177,43 @@ window.onload = function () {
   document.getElementById('time').textContent = result.time;
   document.getElementById('score').textContent = `最终得分：${result.score} 分`;
   
-  // 显示翻译类型
-  const typeText = result.translateType === "cn" ? "中英互译" : "英越互译";
-  document.getElementById('translateTypeText').textContent = `测试类型：${typeText}`;
-  document.getElementById('questionTypeTitle').textContent = `📝 所有题目（${typeText}）`;
+  // 显示翻译类型和方向
+  let typeText = result.translateType === "cn" ? "中英" : "英越";
+  let directionText = "";
+  
+  if (result.translateDirection === "cn2en" || result.translateDirection === "vn2en") {
+    directionText = result.translateType === "cn" ? "中译英" : "越译英";
+  } else if (result.translateDirection === "en2cn" || result.translateDirection === "en2vn") {
+    directionText = result.translateType === "cn" ? "英译中" : "英译越";
+  } else {
+    directionText = "互译";
+  }
+  
+  document.getElementById('translateTypeText').textContent = `测试类型：${typeText}${directionText}`;
+  document.getElementById('questionTypeTitle').textContent = `📝 所有题目（${typeText}${directionText}）`;
 
   // 渲染所有题目+对错
   const questionsList = document.getElementById('allQuestions');
   userAnswers.forEach((answer, index) => {
+    const question = shuffledQuestions[index];
     const isRight = answer.isRight;
     const itemClass = isRight ? 'right' : 'wrong';
     const icon = isRight ? '✓' : '✗';
     const targetText = result.translateType === "cn" ? "中文" : "越南语";
+
+    // 显示用户答题情况
+    const userAnsText = answer.userAnswer 
+      ? `你的答案：${answer.userAnswer}` 
+      : `你的答案：未作答`;
 
     // 题目HTML
     const questionHtml = `
       <div class="question-item ${itemClass}">
         <div class="icon">${icon}</div>
         <div class="content">
-          <div class="en">英文：${answer.en}</div>
-          <div class="target">${targetText}：${answer.target}</div>
+          <div class="en">英文：${question.en}</div>
+          <div class="target">${targetText}：${question.target}</div>
+          <div class="user-ans">${userAnsText}</div>
         </div>
       </div>
     `;
@@ -199,9 +222,8 @@ window.onload = function () {
 
   // 清空临时数据
   localStorage.removeItem('userInfo');
-  localStorage.removeItem('correctAns');
-  localStorage.removeItem('result');
-  localStorage.removeItem('allQuestions');
+  localStorage.removeItem('shuffledQuestions');
   localStorage.removeItem('userAnswers');
+  localStorage.removeItem('result');
 };
 </script>
