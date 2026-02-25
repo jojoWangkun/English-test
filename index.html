@@ -2,10 +2,58 @@
 <meta charset="utf-8">
 <title>英语答题系统</title>
 <style>
-  body{max-width:500px;margin:50px auto;text-align:center;font-family:Arial;padding:0 20px}
-  .btn{padding:15px 30px;margin:20px;font-size:18px;border:none;border-radius:8px;color:white;cursor:pointer;width:100%}
-  .student{background:#4CAF50}
-  .btn:hover{opacity:0.9}
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Microsoft YaHei', Arial, sans-serif;
+  }
+  body {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    min-height: 100vh;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .container {
+    max-width: 500px;
+    width: 100%;
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    padding: 40px 30px;
+    text-align: center;
+  }
+  h1 {
+    color: #2c3e50;
+    margin-bottom: 30px;
+    font-size: 28px;
+    font-weight: 600;
+  }
+  .btn {
+    width: 100%;
+    padding: 18px;
+    margin: 10px 0;
+    font-size: 18px;
+    border: none;
+    border-radius: 12px;
+    color: white;
+    cursor: pointer;
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+    transition: all 0.3s ease;
+  }
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+  }
+  .btn:active {
+    transform: translateY(0);
+  }
 </style>
-<h1>英语答题</h1>
-<button class="btn student" onclick="location.href='student.html'">开始答题</button>
+<div class="container">
+  <h1>📝 英语答题系统</h1>
+  <button class="btn" onclick="location.href='student.html'">开始答题</button>
+</div>
