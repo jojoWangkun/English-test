@@ -69,21 +69,40 @@
     border-color: #4CAF50;
     box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
   }
+  .btn-group {
+    display: flex;
+    gap: 10px;
+  }
   .btn {
-    width: 100%;
     padding: 16px;
     font-size: 17px;
     border: none;
     border-radius: 12px;
     color: white;
     cursor: pointer;
-    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
     transition: all 0.3s ease;
   }
-  .btn:hover {
+  .prev-btn {
+    flex: 1;
+    background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+  }
+  .next-btn {
+    flex: 2;
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+  }
+  .finish-btn {
+    flex: 2;
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+  }
+  .btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  .btn:hover:not(:disabled) {
     transform: translateY(-2px);
-    box-shadow: 0 6px 15px rgba(76, 175, 80, 0.3);
+    box-shadow: 0 6px 15px rgba(0,0,0,0.2);
   }
   .error {
     color: #c62828;
@@ -97,12 +116,20 @@
     padding: 30px;
     font-size: 16px;
   }
+  .direction-info {
+    text-align: center;
+    font-size: 16px;
+    color: #7f8c8d;
+    margin-bottom: 15px;
+  }
 </style>
 <div class="container">
   <div class="header">
     <div class="progress" id="progress">加载中...</div>
     <div class="timer" id="timer">用时：00:00</div>
   </div>
+  
+  <div class="direction-info" id="directionInfo"></div>
   
   <div id="error" class="error" style="display:none"></div>
   
@@ -111,7 +138,12 @@
       <div class="question-title" id="question"></div>
       <input type="text" class="answer-input" id="answer" placeholder="请输入你的答案">
     </div>
-    <button class="btn" onclick="submitAnswer()">提交答案</button>
+    
+    <div class="btn-group">
+      <button class="btn prev-btn" id="prevBtn" onclick="prevQuestion()" disabled>上一题</button>
+      <button class="btn next-btn" id="nextBtn" onclick="nextQuestion()">下一题</button>
+      <button class="btn finish-btn" id="finishBtn" onclick="finishTest()" style="display:none">完成答题</button>
+    </div>
   </div>
   
   <div id="loading" class="loading">🔄 正在加载题库...</div>
@@ -124,14 +156,16 @@ const GITHUB_REPO = "jojoWangkun/English-test";
 const FOLDER = "questions";
 
 // 全局变量
-let questions = [];          // 题库数据
+let questions = [];          // 原始题库
+let shuffledQuestions = [];  // 打乱后的题库
 let currentIndex = 0;        // 当前题目索引
 let correctCount = 0;        // 正确题数
 let userInfo = null;         // 用户信息
 let timerInterval = null;    // 计时器
 let totalSeconds = 0;        // 总答题秒数
 let userAnswers = [];        // 用户答题记录
-let translateType = "cn";    // 翻译类型：cn=中英，vn=英越
+let translateType = "";      // cn:中英, vn:英越
+let translateDirection = ""; // cn2en:中译英, en2cn:英译中, both:互译
 
 // 初始化
 window.onload = init;
@@ -139,13 +173,29 @@ window.onload = init;
 async function init() {
   // 获取用户信息
   userInfo = JSON.parse(localStorage.getItem('userInfo'));
-  if (!userInfo || !userInfo.name || !userInfo.file) {
+  if (!userInfo || !userInfo.name || !userInfo.file || !userInfo.type || !userInfo.direction) {
     location.href = 'student.html';
     return;
   }
 
+  translateType = userInfo.type;
+  translateDirection = userInfo.direction;
+
   // 加载题库
   await loadQuestions();
+  
+  // 打乱题目顺序
+  shuffledQuestions = [...questions].sort(() => Math.random() - 0.5);
+  
+  // 初始化答题记录
+  userAnswers = shuffledQuestions.map(() => ({
+    userAnswer: "",
+    correctAnswer: "",
+    isRight: false
+  }));
+  
+  // 显示翻译方向信息
+  showDirectionInfo();
   
   // 启动计时器
   startTimer();
@@ -154,7 +204,7 @@ async function init() {
   showCurrentQuestion();
 }
 
-// 加载题库（自动识别中英/英越）
+// 加载题库
 async function loadQuestions() {
   const loadingEl = document.getElementById('loading');
   const errorEl = document.getElementById('error');
@@ -182,39 +232,18 @@ async function loadQuestions() {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-    // 过滤有效题目并自动识别翻译类型
+    // 过滤有效题目
     questions = rawData.filter(row => {
-      // 有效行：至少有英文（第2列）+ 中文（第3列）/越南语（第4列）
-      return row.length >= 3 && row[1] && (row[2] || (row.length >=4 && row[3]));
-    }).map(row => {
-      // 识别翻译类型：有第3列中文→中英；只有第4列越南语→英越
-      if (row[2] && !translateType) {
-        translateType = "cn"; // 中英
-        return {
-          en: row[1].toString().trim(),
-          target: row[2].toString().trim(), // 中文
-          type: "cn"
-        };
-      } else if (row.length >=4 && row[3] && !translateType) {
-        translateType = "vn"; // 英越
-        return {
-          en: row[1].toString().trim(),
-          target: row[3].toString().trim(), // 越南语
-          type: "vn"
-        };
-      } else if (translateType === "cn") {
-        return {
-          en: row[1].toString().trim(),
-          target: row[2].toString().trim(),
-          type: "cn"
-        };
+      if (translateType === "cn") {
+        return row.length >= 3 && row[1] && row[2];
       } else {
-        return {
-          en: row[1].toString().trim(),
-          target: row[3].toString().trim(),
-          type: "vn"
-        };
+        return row.length >= 4 && row[1] && row[3];
       }
+    }).map(row => {
+      return {
+        en: row[1].toString().trim(),
+        target: translateType === "cn" ? row[2].toString().trim() : row[3].toString().trim()
+      };
     });
 
     if (questions.length === 0) throw new Error("题库中无有效数据！");
@@ -230,6 +259,24 @@ async function loadQuestions() {
   }
 }
 
+// 显示翻译方向信息
+function showDirectionInfo() {
+  const infoEl = document.getElementById('directionInfo');
+  let infoText = "";
+  
+  if (translateType === "cn") {
+    if (translateDirection === "cn2en") infoText = "当前模式：中译英";
+    else if (translateDirection === "en2cn") infoText = "当前模式：英译中";
+    else infoText = "当前模式：中英互译";
+  } else {
+    if (translateDirection === "vn2en") infoText = "当前模式：越译英 (Tiếng Việt sang Tiếng Anh)";
+    else if (translateDirection === "en2vn") infoText = "当前模式：英译越 (Tiếng Anh sang Tiếng Việt)";
+    else infoText = "当前模式：英越互译 (Đối dịch lẫn nhau)";
+  }
+  
+  infoEl.textContent = infoText;
+}
+
 // 启动计时器
 function startTimer() {
   timerInterval = setInterval(() => {
@@ -240,67 +287,106 @@ function startTimer() {
   }, 1000);
 }
 
-// 显示当前题目（根据类型显示英中/英越互译）
+// 显示当前题目
 function showCurrentQuestion() {
   const progressEl = document.getElementById('progress');
   const questionEl = document.getElementById('question');
   const answerEl = document.getElementById('answer');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const finishBtn = document.getElementById('finishBtn');
 
   // 更新进度
-  progressEl.textContent = `第 ${currentIndex + 1} 题 / 共 ${questions.length} 题`;
+  progressEl.textContent = `第 ${currentIndex + 1} 题 / 共 ${shuffledQuestions.length} 题`;
+  
+  // 更新按钮状态
+  prevBtn.disabled = currentIndex === 0;
+  nextBtn.style.display = currentIndex === shuffledQuestions.length - 1 ? 'none' : 'block';
+  finishBtn.style.display = currentIndex === shuffledQuestions.length - 1 ? 'block' : 'none';
   
   // 获取当前题目
-  const currentQ = questions[currentIndex];
-  const isEn2Target = Math.random() > 0.5; // 随机英译目标/目标译英
+  const currentQ = shuffledQuestions[currentIndex];
+  let questionText = "";
+  let correctAns = "";
 
-  // 保存正确答案（用于判断）
-  localStorage.setItem('correctAns', isEn2Target ? currentQ.target : currentQ.en);
+  // 根据选择的方向生成题目
+  if (translateDirection === "cn2en" || translateDirection === "vn2en") {
+    // 中/越译英
+    questionText = translateType === "cn" ? `中译英：${currentQ.target}` : `越译英：${currentQ.target}`;
+    correctAns = currentQ.en;
+  } else if (translateDirection === "en2cn" || translateDirection === "en2vn") {
+    // 英译中/越
+    questionText = translateType === "cn" ? `英译中：${currentQ.en}` : `英译越：${currentQ.en}`;
+    correctAns = currentQ.target;
+  } else {
+    // 互译 - 随机
+    const isEn2Target = Math.random() > 0.5;
+    if (isEn2Target) {
+      questionText = translateType === "cn" ? `英译中：${currentQ.en}` : `英译越：${currentQ.en}`;
+      correctAns = currentQ.target;
+    } else {
+      questionText = translateType === "cn" ? `中译英：${currentQ.target}` : `越译英：${currentQ.target}`;
+      correctAns = currentQ.en;
+    }
+  }
+
+  // 显示题目
+  questionEl.textContent = questionText;
   
-  // 根据翻译类型显示题目
-  const typeText = translateType === "cn" ? "中" : "越南";
-  questionEl.textContent = isEn2Target ? `英译${typeText}：${currentQ.en}` : `${typeText}译英：${currentQ.target}`;
-  answerEl.value = "";
+  // 恢复之前输入的答案
+  answerEl.value = userAnswers[currentIndex].userAnswer || "";
+  
+  // 保存正确答案
+  userAnswers[currentIndex].correctAnswer = correctAns;
+  
   answerEl.focus();
 }
 
-// 提交答案（不实时提示对错）
-function submitAnswer() {
+// 上一题
+function prevQuestion() {
+  if (currentIndex <= 0) return;
+  
+  // 保存当前答案
+  saveCurrentAnswer();
+  
+  // 切换到上一题
+  currentIndex--;
+  showCurrentQuestion();
+}
+
+// 下一题
+function nextQuestion() {
+  if (currentIndex >= shuffledQuestions.length - 1) return;
+  
+  // 保存当前答案
+  saveCurrentAnswer();
+  
+  // 切换到下一题
+  currentIndex++;
+  showCurrentQuestion();
+}
+
+// 保存当前答案
+function saveCurrentAnswer() {
   const answerEl = document.getElementById('answer');
   const userAnswer = answerEl.value.trim().toLowerCase();
-  const correctAnswer = localStorage.getItem('correctAns').trim().toLowerCase();
-
-  // 判断对错并记录
-  let isRight = false;
-  if (userAnswer === correctAnswer) {
-    correctCount++;
-    isRight = true;
-  }
+  const correctAnswer = userAnswers[currentIndex].correctAnswer.trim().toLowerCase();
   
-  // 记录答题信息
-  userAnswers.push({
-    userAnswer: userAnswer,
-    correctAnswer: correctAnswer,
-    isRight: isRight,
-    en: questions[currentIndex].en,
-    target: questions[currentIndex].target,
-    type: questions[currentIndex].type
-  });
-
-  // 下一题/完成答题
-  currentIndex++;
-  if (currentIndex >= questions.length) {
-    finishTest();
-    return;
-  }
-
-  // 显示下一题
-  showCurrentQuestion();
+  // 更新答题记录
+  userAnswers[currentIndex].userAnswer = answerEl.value.trim();
+  userAnswers[currentIndex].isRight = userAnswer === correctAnswer;
 }
 
 // 完成答题
 function finishTest() {
+  // 保存最后一题答案
+  saveCurrentAnswer();
+  
   // 停止计时器
   clearInterval(timerInterval);
+  
+  // 计算正确数
+  correctCount = userAnswers.filter(ans => ans.isRight).length;
   
   // 计算总用时（格式化）
   const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
@@ -308,22 +394,23 @@ function finishTest() {
   const totalTime = `${minutes}:${seconds}`;
   
   // 计算得分
-  const score = ((correctCount / questions.length) * 100).toFixed(1);
+  const score = ((correctCount / shuffledQuestions.length) * 100).toFixed(1);
   
   // 保存结果
   localStorage.setItem('result', JSON.stringify({
     name: userInfo.name,
     file: userInfo.file,
-    total: questions.length,
+    total: shuffledQuestions.length,
     correct: correctCount,
-    wrong: questions.length - correctCount,
+    wrong: shuffledQuestions.length - correctCount,
     score: score,
     time: totalTime,
-    translateType: translateType // 保存翻译类型
+    translateType: translateType,
+    translateDirection: translateDirection
   }));
   
   // 保存题目和答题记录
-  localStorage.setItem('allQuestions', JSON.stringify(questions));
+  localStorage.setItem('shuffledQuestions', JSON.stringify(shuffledQuestions));
   localStorage.setItem('userAnswers', JSON.stringify(userAnswers));
   
   // 跳转到结果页
