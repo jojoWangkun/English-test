@@ -1,28 +1,207 @@
 <!DOCTYPE html>
 <meta charset="utf-8">
-<title>答题完成</title>
+<title>答题完成 | 英语答题系统</title>
 <style>
-  body{max-width:500px;margin:50px auto;text-align:center;font-family:Arial;padding:0 20px}
-  .card{border:1px solid #ccc;padding:30px;border-radius:12px;background:#f9f9f9;margin:20px 0}
-  .score{font-size:32px;font-weight:bold;color:#4CAF50;margin:20px 0}
-  .btn{display:inline-block;padding:12px 30px;margin:10px 20px;color:white;background:#4CAF50;border-radius:8px;text-decoration:none}
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Microsoft YaHei', Arial, sans-serif;
+  }
+  body {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .container {
+    max-width: 700px;
+    width: 100%;
+    margin: 30px auto;
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    padding: 40px 30px;
+  }
+  h1 {
+    color: #2c3e50;
+    margin-bottom: 20px;
+    font-size: 28px;
+    font-weight: 600;
+    text-align: center;
+  }
+  .result-summary {
+    background: #f8f9fa;
+    border-radius: 15px;
+    padding: 25px;
+    margin-bottom: 30px;
+    text-align: center;
+  }
+  .info-item {
+    font-size: 18px;
+    color: #34495e;
+    margin: 8px 0;
+  }
+  .score {
+    font-size: 32px;
+    font-weight: bold;
+    color: #4CAF50;
+    margin: 15px 0;
+  }
+  .btn-group {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 30px;
+  }
+  .btn {
+    flex: 1;
+    padding: 16px;
+    font-size: 17px;
+    border: none;
+    border-radius: 12px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+  .btn-again {
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
+  }
+  .btn-home {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.2);
+  }
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(0,0,0,0.2);
+  }
+
+  /* 题目列表样式 */
+  .question-item {
+    border: 1px solid #eee;
+    border-radius: 10px;
+    padding: 18px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: flex-start;
+    font-size: 16px;
+  }
+  .question-item .icon {
+    font-size: 22px;
+    margin-right: 15px;
+    width: 26px;
+    text-align: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .question-item .content {
+    flex: 1;
+  }
+  .question-item .en {
+    font-weight: 500;
+    color: #2c3e50;
+    margin-bottom: 8px;
+  }
+  .question-item .target {
+    color: #555;
+  }
+  .right {
+    border-left: 5px solid #4CAF50;
+    background-color: #f9fffa;
+  }
+  .wrong {
+    border-left: 5px solid #f44336;
+    background-color: #fff5f5;
+  }
+  .right .icon {
+    color: #4CAF50;
+  }
+  .wrong .icon {
+    color: #f44336;
+  }
+  .translate-type {
+    text-align: center;
+    font-size: 17px;
+    color: #2c3e50;
+    margin-bottom: 20px;
+    font-weight: 500;
+  }
 </style>
-<div class="card">
-  <h1>完成！</h1>
-  <div id="name"></div>
-  <div>总题数：<span id="t"></span></div>
-  <div>正确：<span id="o"></span></div>
-  <div class="score" id="s"></div>
-  <a class="btn" href="student.html">再答一次</a>
+
+<div class="container">
+  <h1>🏁 答题完成</h1>
+
+  <div class="result-summary">
+    <div class="info-item">姓名：<span id="userName"></span></div>
+    <div class="info-item">题库：<span id="questionFile"></span></div>
+    <div class="info-item" id="translateTypeText"></div>
+    <div class="info-item">总题数：<span id="total"></span> 题</div>
+    <div class="info-item">正确：<span id="correct"></span> 题 | 错误：<span id="wrong"></span> 题</div>
+    <div class="info-item">用时：<span id="time"></span></div>
+    <div class="score" id="score"></div>
+  </div>
+
+  <div class="btn-group">
+    <button class="btn btn-again" onclick="location.href='student.html'">重新答题</button>
+    <button class="btn btn-home" onclick="location.href='index.html'">返回首页</button>
+  </div>
+
+  <div class="translate-type" id="questionTypeTitle"></div>
+  <div id="allQuestions"></div>
 </div>
 
 <script>
-window.onload=()=>{
-  const r=JSON.parse(localStorage.getItem('res'));
-  if(!r){location.href='student.html';return}
-  document.getElementById('name').textContent='姓名：'+r.name;
-  document.getElementById('t').textContent=r.total;
-  document.getElementById('o').textContent=r.ok;
-  document.getElementById('s').textContent='得分：'+r.score+'分';
-}
+window.onload = function () {
+  // 获取答题结果和记录
+  const result = JSON.parse(localStorage.getItem('result'));
+  const userAnswers = JSON.parse(localStorage.getItem('userAnswers') || '[]');
+
+  // 无结果时跳转
+  if (!result || userAnswers.length === 0) {
+    alert('暂无答题结果');
+    location.href = 'student.html';
+    return;
+  }
+
+  // 填充汇总信息
+  document.getElementById('userName').textContent = result.name;
+  document.getElementById('questionFile').textContent = result.file;
+  document.getElementById('total').textContent = result.total;
+  document.getElementById('correct').textContent = result.correct;
+  document.getElementById('wrong').textContent = result.wrong;
+  document.getElementById('time').textContent = result.time;
+  document.getElementById('score').textContent = `最终得分：${result.score} 分`;
+  
+  // 显示翻译类型
+  const typeText = result.translateType === "cn" ? "中英互译" : "英越互译";
+  document.getElementById('translateTypeText').textContent = `测试类型：${typeText}`;
+  document.getElementById('questionTypeTitle').textContent = `📝 所有题目（${typeText}）`;
+
+  // 渲染所有题目+对错
+  const questionsList = document.getElementById('allQuestions');
+  userAnswers.forEach((answer, index) => {
+    const isRight = answer.isRight;
+    const itemClass = isRight ? 'right' : 'wrong';
+    const icon = isRight ? '✓' : '✗';
+    const targetText = result.translateType === "cn" ? "中文" : "越南语";
+
+    // 题目HTML
+    const questionHtml = `
+      <div class="question-item ${itemClass}">
+        <div class="icon">${icon}</div>
+        <div class="content">
+          <div class="en">英文：${answer.en}</div>
+          <div class="target">${targetText}：${answer.target}</div>
+        </div>
+      </div>
+    `;
+    questionsList.innerHTML += questionHtml;
+  });
+
+  // 清空临时数据
+  localStorage.removeItem('userInfo');
+  localStorage.removeItem('correctAns');
+  localStorage.removeItem('result');
+  localStorage.removeItem('allQuestions');
+  localStorage.removeItem('userAnswers');
+};
 </script>
