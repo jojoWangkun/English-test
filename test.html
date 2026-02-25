@@ -1,83 +1,332 @@
 <!DOCTYPE html>
 <meta charset="utf-8">
-<title>答题中</title>
+<title>答题中 | 英语答题系统</title>
 <style>
-  body{max-width:600px;margin:20px auto;font-family:Arial;padding:0 20px}
-  .progress{text-align:center;font-size:18px;margin:10px 0}
-  .card{border:1px solid #ccc;padding:25px;border-radius:8px;margin:20px 0}
-  .q{font-size:20px;padding:15px;background:#f9f9f9;border-radius:8px;text-align:center}
-  input{width:100%;padding:12px;font-size:16px;border:1px solid #ccc;border-radius:8px;margin:20px 0}
-  button{width:100%;padding:12px;font-size:18px;border:none;border-radius:8px;color:white;background:#2196F3;cursor:pointer}
-  .error{color:red;text-align:center;padding:15px}
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Microsoft YaHei', Arial, sans-serif;
+  }
+  body {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .container {
+    max-width: 600px;
+    width: 100%;
+    margin: 20px auto;
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    padding: 30px;
+  }
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .progress {
+    color: #2c3e50;
+    font-size: 18px;
+    font-weight: 600;
+  }
+  .timer {
+    color: #3498db;
+    font-size: 15px;
+    background: #f0f7ff;
+    padding: 6px 12px;
+    border-radius: 20px;
+  }
+  .question-card {
+    background: #f8f9fa;
+    border-radius: 15px;
+    padding: 25px;
+    margin-bottom: 20px;
+  }
+  .question-title {
+    font-size: 20px;
+    color: #2c3e50;
+    margin-bottom: 20px;
+    text-align: center;
+    line-height: 1.5;
+  }
+  .answer-input {
+    width: 100%;
+    padding: 16px;
+    border: 1px solid #e1e8ed;
+    border-radius: 10px;
+    font-size: 16px;
+    margin-bottom: 15px;
+    transition: border 0.3s ease;
+  }
+  .answer-input:focus {
+    outline: none;
+    border-color: #4CAF50;
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+  }
+  .btn {
+    width: 100%;
+    padding: 16px;
+    font-size: 17px;
+    border: none;
+    border-radius: 12px;
+    color: white;
+    cursor: pointer;
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
+    transition: all 0.3s ease;
+  }
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(76, 175, 80, 0.3);
+  }
+  .error {
+    color: #c62828;
+    text-align: center;
+    padding: 20px;
+    font-size: 16px;
+  }
+  .loading {
+    text-align: center;
+    color: #3498db;
+    padding: 30px;
+    font-size: 16px;
+  }
 </style>
-<div class="progress" id="progress">加载中...</div>
-<div class="card" id="box" style="display:none">
-  <div class="q" id="q"></div>
-  <input id="ans" autofocus>
-  <button onclick="next()">下一题</button>
+<div class="container">
+  <div class="header">
+    <div class="progress" id="progress">加载中...</div>
+    <div class="timer" id="timer">用时：00:00</div>
+  </div>
+  
+  <div id="error" class="error" style="display:none"></div>
+  
+  <div id="questionBox" style="display:none">
+    <div class="question-card">
+      <div class="question-title" id="question"></div>
+      <input type="text" class="answer-input" id="answer" placeholder="请输入你的答案">
+    </div>
+    <button class="btn" onclick="submitAnswer()">提交答案</button>
+  </div>
+  
+  <div id="loading" class="loading">🔄 正在加载题库...</div>
 </div>
-<div id="err" class="error" style="display:none"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-const REPO = "jojoWangkun/English-test";
+// 配置
+const GITHUB_REPO = "jojoWangkun/English-test";
 const FOLDER = "questions";
 
-let qs = [], cur=0, ok=0, name="", file="";
+// 全局变量
+let questions = [];          // 题库数据
+let currentIndex = 0;        // 当前题目索引
+let correctCount = 0;        // 正确题数
+let userInfo = null;         // 用户信息
+let timerInterval = null;    // 计时器
+let totalSeconds = 0;        // 总答题秒数
+let userAnswers = [];        // 用户答题记录
+let translateType = "cn";    // 翻译类型：cn=中英，vn=英越
 
+// 初始化
 window.onload = init;
+
 async function init() {
-  const u = JSON.parse(localStorage.getItem('user'));
-  if (!u) { location.href='student.html'; return; }
-  name = u.name; file = u.file;
-  await load();
-}
-
-async function load() {
-  const p = document.getElementById('progress');
-  const err = document.getElementById('err');
-  try {
-    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${FOLDER}/${file}`);
-    const d = await r.json();
-    const b = atob(d.content);
-    const u8 = new Uint8Array(b.length);
-    for(let i=0;i<b.length;i++)u8[i]=b.charCodeAt(i);
-    const wb = XLSX.read(u8);
-    const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1});
-    qs = data.filter(r=>r.length>=3&&r[0]&&r[1]&&r[2]).map(r=>({
-      en:r[1].trim(), cn:r[2].trim()
-    }));
-    show();
-    document.getElementById('box').style.display='block';
-  }catch(e){
-    err.textContent='加载失败：'+e.message; err.style.display='block'; p.style.display='none';
-  }
-}
-
-function show() {
-  const p = document.getElementById('progress');
-  const q = document.getElementById('q');
-  const ans = document.getElementById('ans');
-  p.textContent = `${cur+1}/${qs.length}`;
-  const item = qs[cur];
-  const isEn = Math.random()>.5;
-  localStorage.setItem('ok',isEn?item.cn:item.en);
-  q.textContent = isEn ? `英译中：${item.en}` : `中译英：${item.cn}`;
-  ans.value=''; ans.focus();
-}
-
-function next() {
-  const a = document.getElementById('ans').value.trim().toLowerCase();
-  const c = localStorage.getItem('ok').trim().toLowerCase();
-  if(a===c) ok++;
-  cur++;
-  if(cur>=qs.length){
-    localStorage.setItem('res',JSON.stringify({
-      name, total:qs.length, ok, score:((ok/qs.length)*100).toFixed(1)
-    }));
-    location.href='result.html';
+  // 获取用户信息
+  userInfo = JSON.parse(localStorage.getItem('userInfo'));
+  if (!userInfo || !userInfo.name || !userInfo.file) {
+    location.href = 'student.html';
     return;
   }
-  show();
+
+  // 加载题库
+  await loadQuestions();
+  
+  // 启动计时器
+  startTimer();
+  
+  // 显示第一题
+  showCurrentQuestion();
+}
+
+// 加载题库（自动识别中英/英越）
+async function loadQuestions() {
+  const loadingEl = document.getElementById('loading');
+  const errorEl = document.getElementById('error');
+  
+  try {
+    const requestUrl = `https://api.github.com/repos/${GITHUB_REPO}/contents/${FOLDER}/${userInfo.file}`;
+    const response = await fetch(requestUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/vnd.github.v3+json'
+      },
+      mode: 'cors'
+    });
+
+    if (!response.ok) throw new Error("题库文件不存在，请检查！");
+
+    const fileData = await response.json();
+    const content = atob(fileData.content);
+    const uint8Array = new Uint8Array(content.length);
+    for (let i = 0; i < content.length; i++) {
+      uint8Array[i] = content.charCodeAt(i);
+    }
+
+    const workbook = XLSX.read(uint8Array);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+    // 过滤有效题目并自动识别翻译类型
+    questions = rawData.filter(row => {
+      // 有效行：至少有英文（第2列）+ 中文（第3列）/越南语（第4列）
+      return row.length >= 3 && row[1] && (row[2] || (row.length >=4 && row[3]));
+    }).map(row => {
+      // 识别翻译类型：有第3列中文→中英；只有第4列越南语→英越
+      if (row[2] && !translateType) {
+        translateType = "cn"; // 中英
+        return {
+          en: row[1].toString().trim(),
+          target: row[2].toString().trim(), // 中文
+          type: "cn"
+        };
+      } else if (row.length >=4 && row[3] && !translateType) {
+        translateType = "vn"; // 英越
+        return {
+          en: row[1].toString().trim(),
+          target: row[3].toString().trim(), // 越南语
+          type: "vn"
+        };
+      } else if (translateType === "cn") {
+        return {
+          en: row[1].toString().trim(),
+          target: row[2].toString().trim(),
+          type: "cn"
+        };
+      } else {
+        return {
+          en: row[1].toString().trim(),
+          target: row[3].toString().trim(),
+          type: "vn"
+        };
+      }
+    });
+
+    if (questions.length === 0) throw new Error("题库中无有效数据！");
+
+    // 隐藏加载，显示答题区
+    loadingEl.style.display = 'none';
+    document.getElementById('questionBox').style.display = 'block';
+  } catch (error) {
+    loadingEl.style.display = 'none';
+    errorEl.style.display = 'block';
+    errorEl.textContent = `❌ 加载失败：${error.message}`;
+    console.error("题库加载错误：", error);
+  }
+}
+
+// 启动计时器
+function startTimer() {
+  timerInterval = setInterval(() => {
+    totalSeconds++;
+    const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+    const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+    document.getElementById('timer').textContent = `用时：${minutes}:${seconds}`;
+  }, 1000);
+}
+
+// 显示当前题目（根据类型显示英中/英越互译）
+function showCurrentQuestion() {
+  const progressEl = document.getElementById('progress');
+  const questionEl = document.getElementById('question');
+  const answerEl = document.getElementById('answer');
+
+  // 更新进度
+  progressEl.textContent = `第 ${currentIndex + 1} 题 / 共 ${questions.length} 题`;
+  
+  // 获取当前题目
+  const currentQ = questions[currentIndex];
+  const isEn2Target = Math.random() > 0.5; // 随机英译目标/目标译英
+
+  // 保存正确答案（用于判断）
+  localStorage.setItem('correctAns', isEn2Target ? currentQ.target : currentQ.en);
+  
+  // 根据翻译类型显示题目
+  const typeText = translateType === "cn" ? "中" : "越南";
+  questionEl.textContent = isEn2Target ? `英译${typeText}：${currentQ.en}` : `${typeText}译英：${currentQ.target}`;
+  answerEl.value = "";
+  answerEl.focus();
+}
+
+// 提交答案（不实时提示对错）
+function submitAnswer() {
+  const answerEl = document.getElementById('answer');
+  const userAnswer = answerEl.value.trim().toLowerCase();
+  const correctAnswer = localStorage.getItem('correctAns').trim().toLowerCase();
+
+  // 判断对错并记录
+  let isRight = false;
+  if (userAnswer === correctAnswer) {
+    correctCount++;
+    isRight = true;
+  }
+  
+  // 记录答题信息
+  userAnswers.push({
+    userAnswer: userAnswer,
+    correctAnswer: correctAnswer,
+    isRight: isRight,
+    en: questions[currentIndex].en,
+    target: questions[currentIndex].target,
+    type: questions[currentIndex].type
+  });
+
+  // 下一题/完成答题
+  currentIndex++;
+  if (currentIndex >= questions.length) {
+    finishTest();
+    return;
+  }
+
+  // 显示下一题
+  showCurrentQuestion();
+}
+
+// 完成答题
+function finishTest() {
+  // 停止计时器
+  clearInterval(timerInterval);
+  
+  // 计算总用时（格式化）
+  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+  const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+  const totalTime = `${minutes}:${seconds}`;
+  
+  // 计算得分
+  const score = ((correctCount / questions.length) * 100).toFixed(1);
+  
+  // 保存结果
+  localStorage.setItem('result', JSON.stringify({
+    name: userInfo.name,
+    file: userInfo.file,
+    total: questions.length,
+    correct: correctCount,
+    wrong: questions.length - correctCount,
+    score: score,
+    time: totalTime,
+    translateType: translateType // 保存翻译类型
+  }));
+  
+  // 保存题目和答题记录
+  localStorage.setItem('allQuestions', JSON.stringify(questions));
+  localStorage.setItem('userAnswers', JSON.stringify(userAnswers));
+  
+  // 跳转到结果页
+  location.href = 'result.html';
 }
 </script>
